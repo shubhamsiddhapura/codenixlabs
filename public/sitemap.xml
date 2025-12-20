@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="https://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.codenixlabs.com/</loc>
+    <priority>1.00</priority>
+  </url>
+  <url>
+    <loc>https://www.codenixlabs.com/about</loc>
+    <priority>0.80</priority>
+  </url>
+  <url>
+    <loc>https://www.codenixlabs.com/services</loc>
+    <priority>0.80</priority>
+  </url>
+  <url>
+    <loc>https://www.codenixlabs.com/contact</loc>
+    <priority>0.64</priority>
+  </url>
+</urlset>

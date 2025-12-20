@@ -1,0 +1,582 @@
+import React, { useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { Link } from 'react-router-dom';
+import { Smartphone, Globe, Palette , BrainCircuit, ChevronDown, ChevronUp } from 'lucide-react';
+
+import HeroSection from '../components/HeroSection';
+import ServiceCard from '../components/ServiceCard';
+import BlogCard from '../components/BlogCard';
+import { BlogService } from '../services/blogService';
+import { BlogPost } from '../types/blog';
+
+// Register ScrollTrigger
+gsap.registerPlugin(ScrollTrigger);
+
+// Interface for services
+interface Service {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+}
+
+const services: Service[] = [
+  {
+    title: "Web Development",
+    description: "We build responsive, high-performance websites using the latest technologies to deliver exceptional user experiences.",
+    icon: <Globe size={24} />
+  },
+  {
+    title: "Mobile App Development",
+    description: "Native and cross-platform mobile applications that provide seamless experiences across all devices.",
+    icon: <Smartphone size={24} />
+  },
+  {
+    title: "UI/UX Design",
+    description: "User-centered design solutions that combine aesthetics with functionality to create intuitive interfaces.",
+    icon: <Palette size={24} />
+  },
+  {
+    title: "AI Integration",
+    description: "Harness the power of artificial intelligence and machine learning to automate processes, enhance customer experiences, and gain competitive advantage.",
+    icon: <BrainCircuit size={24} />
+  }
+];
+
+// FAQ data
+const faqData = [
+  {
+    question: "How long does a typical project take?",
+    answer: "Project timelines vary based on complexity and scope. A simple website typically takes 2-4 weeks, while complex web applications can take 2-6 months. We provide detailed timelines during our initial consultation and keep you updated throughout the development process."
+  },
+  {
+    question: "What technologies do you specialize in?",
+    answer: "We specialize in modern web technologies including React, Node.js, Python, Flutter for mobile apps, and cloud platforms like AWS. Our team stays current with the latest frameworks and tools to deliver cutting-edge solutions that meet your specific needs."
+  },
+  {
+    question: "Do you provide ongoing support after launch?",
+    answer: "Yes, we offer comprehensive post-launch support including maintenance, updates, security patches, and feature enhancements. We provide various support packages tailored to your needs, ensuring your digital solution continues to perform optimally."
+  },
+  {
+    question: "How do you ensure project quality and deadlines?",
+    answer: "We follow agile development methodologies with regular milestone reviews, automated testing, and continuous integration. Our project management approach includes clear communication, regular updates, and quality assurance at every stage to ensure timely delivery of high-quality solutions."
+  }
+];
+
+// FAQ Accordion Component
+const FAQAccordion: React.FC = () => {
+  const [openIndex, setOpenIndex] = React.useState<number | null>(null);
+
+  const toggleAccordion = (index: number) => {
+    setOpenIndex(openIndex === index ? null : index);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-4">
+      {faqData.map((faq, index) => (
+        <motion.div
+          key={index}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 0.5, delay: index * 0.1 }}
+          className="overflow-hidden glass rounded-xl hover-effect"
+        >
+          <button
+            onClick={() => toggleAccordion(index)}
+            className="flex items-center justify-between w-full p-6 text-left transition-colors duration-300 hover:bg-white/5"
+          >
+            <h3 className="pr-4 text-lg font-bold text-white font-orbitron">
+              {faq.question}
+            </h3>
+            <div className="flex-shrink-0">
+              {openIndex === index ? (
+                <ChevronUp className="w-6 h-6 transition-transform duration-300 text-primary" />
+              ) : (
+                <ChevronDown className="w-6 h-6 transition-transform duration-300 text-primary" />
+              )}
+            </div>
+          </button>
+          
+          <motion.div
+            initial={false}
+            animate={{
+              height: openIndex === index ? "auto" : 0,
+              opacity: openIndex === index ? 1 : 0
+            }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="px-6 pb-6">
+              <div className="h-px mb-4 bg-gradient-to-r from-primary/20 via-primary/40 to-primary/20"></div>
+              <p className="leading-relaxed text-neutral-300">
+                {faq.answer}
+              </p>
+            </div>
+          </motion.div>
+        </motion.div>
+      ))}
+    </div>
+  );
+};
+const Home: React.FC = () => {
+  const [featuredPosts, setFeaturedPosts] = React.useState<BlogPost[]>([]);
+
+  useEffect(() => {
+    // Load featured blog posts
+    const loadFeaturedPosts = async () => {
+      try {
+        const posts = await BlogService.getFeaturedPosts(3);
+        setFeaturedPosts(posts);
+      } catch (error) {
+        console.error('Error loading featured posts:', error);
+      }
+    };
+
+    loadFeaturedPosts();
+
+    // Parallax effect on scroll for featured projects
+    gsap.utils.toArray('.project-card').forEach((element, i) => {
+      gsap.fromTo(
+        element,
+        { y: i % 2 === 0 ? 100 : 0 },
+        {
+          y: i % 2 === 0 ? 0 : 100,
+          ease: 'none',
+          scrollTrigger: {
+            trigger: element,
+            start: 'top bottom',
+            end: 'bottom top',
+            scrub: true
+          }
+        }
+      );
+    });
+    
+    return () => {
+      ScrollTrigger.getAll().forEach(trigger => trigger.kill());
+    };
+  }, []);
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      {/* Hero Section */}
+      <HeroSection />
+      
+      {/* Services Section */}
+      <section className="relative py-20">
+        <div className="container px-4 mx-auto sm:px-6 lg:px-8">
+          <div className="mb-16 text-center">
+            <motion.h2 
+              className="section-title neon-text"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+            >
+              Our Services
+            </motion.h2>
+            <motion.p 
+              className="section-subtitle"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
+              We deliver cutting-edge solutions tailored to your business needs
+            </motion.p>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {services.map((service, index) => (
+              <ServiceCard 
+                key={service.title}
+                title={service.title}
+                description={service.description}
+                icon={service.icon}
+                index={index}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+      
+      {/* Featured Blog Posts */}
+      {featuredPosts.length > 0 && (
+        <section className="relative py-20 bg-neutral-900">
+          <div className="absolute inset-0 bg-glow opacity-20"></div>
+          
+          <div className="container relative z-10 px-4 mx-auto sm:px-6 lg:px-8">
+            <div className="mb-16 text-center">
+              <motion.h2 
+                className="section-title neon-text"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5 }}
+              >
+                Latest Insights
+              </motion.h2>
+              <motion.p 
+                className="section-subtitle"
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+              >
+                Stay updated with the latest trends and insights from our experts
+              </motion.p>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-8 mb-12 md:grid-cols-2 lg:grid-cols-3">
+              {featuredPosts.map((post, index) => (
+                <BlogCard key={post._id} post={post} index={index} featured />
+              ))}
+            </div>
+            
+            <div className="text-center">
+              <Link to="/blog" className="btn btn-outline neon-border hover-effect">
+                View All Articles
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
+      
+      {/* Technology Showcase */}
+      <section className="relative py-20 overflow-hidden">
+        <div className="container relative z-10 px-4 mx-auto sm:px-6 lg:px-8">
+          <div className="mb-16 text-center">
+            <motion.h2 
+              className="section-title neon-text"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+            >
+              Technologies We Excel In
+            </motion.h2>
+            <motion.p 
+              className="section-subtitle"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
+              Advanced tools and modern frameworks that drive our creative solutions
+            </motion.p>
+          </div>
+          
+          {/* Moving Technology Row */}
+          <div className="relative">
+            <div className="flex overflow-hidden">
+              <div className="flex animate-scroll-left">
+                {[
+                  'React', 'Node.js', 'TypeScript', 'JavaScript', 
+                   'Angular', 'Next.js', 'Vue.js',
+                  'React', 'Node.js', 'TypeScript', 'JavaScript', 
+                   'Angular' ,'Next.js', 'Vue.js'
+                ].map((tech, index) => (
+                  <div
+                    key={index}
+                    className="flex-shrink-0 px-6 py-4 mx-4 transition-all duration-300 border glass rounded-xl bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/20 hover:border-primary/40"
+                  >
+                    <span className="text-lg font-medium text-white whitespace-nowrap">
+                      {tech}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Gradient overlays for smooth edges */}
+            <div className="absolute top-0 left-0 z-10 w-32 h-full bg-gradient-to-r from-background to-transparent"></div>
+            <div className="absolute top-0 right-0 z-10 w-32 h-full bg-gradient-to-l from-background to-transparent"></div>
+          </div>
+          
+          {/* Second row moving in opposite direction */}
+          <div className="relative mt-8">
+            <div className="flex overflow-hidden">
+              <div className="flex animate-scroll-right">
+                {[
+                  'MongoDB', 'Flutter', 'Firebase', 'Python', 'Django', 'Docker', 'AWS',
+                   'MongoDB', 'Flutter', 'Firebase', 'Python', 'Django', 'Docker', 'AWS',
+                ].map((tech, index) => (
+                  <div
+                    key={index}
+                    className="flex-shrink-0 px-6 py-4 mx-4 transition-all duration-300 border glass rounded-xl bg-gradient-to-r from-secondary/10 to-accent/10 border-secondary/20 hover:border-secondary/40"
+                  >
+                    <span className="text-lg font-medium text-white whitespace-nowrap">
+                      {tech}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Gradient overlays for smooth edges */}
+            <div className="absolute top-0 left-0 z-10 w-32 h-full bg-gradient-to-r from-background to-transparent"></div>
+            <div className="absolute top-0 right-0 z-10 w-32 h-full bg-gradient-to-l from-background to-transparent"></div>
+          </div>
+        </div>
+      </section>
+      
+      {/* Testimonials Section */}
+      <section className="relative py-20 overflow-hidden">
+        {/* Animated Stars Background */}
+        <div className="absolute inset-0 overflow-hidden">
+          {[...Array(40)].map((_, i) => (
+            <motion.div
+              key={i}
+              className="absolute w-1 h-1 bg-white rounded-full"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+              }}
+              animate={{
+                opacity: [0.3, 1, 0.3],
+                scale: [0.5, 1, 0.5],
+              }}
+              transition={{
+                duration: 3 + Math.random() * 2,
+                repeat: Infinity,
+                delay: Math.random() * 2,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Animated Background Glow */}
+        <motion.div
+          className="absolute rounded-full top-1/3 left-1/4 w-96 h-96 bg-primary/12 blur-3xl"
+          animate={{
+            x: [0, 50, 0],
+            y: [0, 30, 0],
+          }}
+          transition={{
+            duration: 8,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+        <motion.div
+          className="absolute rounded-full bottom-1/3 right-1/4 w-96 h-96 bg-secondary/12 blur-3xl"
+          animate={{
+            x: [0, -50, 0],
+            y: [0, -30, 0],
+          }}
+          transition={{
+            duration: 9,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+
+        <div className="container relative z-10 px-4 py-auto sm:px-6 lg:px-8">
+
+        {/* ===== Heading ===== */}
+        <div className="text-center ">
+          <motion.h2
+            className="section-title neon-text"
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+          >
+            What Our Clients Say
+          </motion.h2>
+
+          <motion.p
+            className="section-subtitle"
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+          >
+            Trusted by founders and fast-growing companies worldwide
+          </motion.p>
+        </div>
+
+        {/* ===== Wrapper ===== */}
+        <div className="relative max-w-5xl mx-auto">
+
+          {/* ===== Floating Avatars ===== */}
+         {[
+  { top: "top-6 left-12", size: "w-14 h-14", seed: "client1" },
+  { top: "top-20 left-36", size: "w-12 h-12", seed: "client2" },
+  { top: "top-10 right-36", size: "w-14 h-14", seed: "client3" },
+  { top: "top-24 right-12", size: "w-12 h-12", seed: "client4" },
+  { top: "bottom-16 right-20", size: "w-14 h-14", seed: "client5" },
+  { top: "bottom-20 left-20", size: "w-12 h-12", seed: "client6" },
+  { top: "bottom-8 left-1/3", size: "w-10 h-10", seed: "client7" },
+].map((item, i) => (
+  <motion.img
+    key={i}
+    initial={{ opacity: 0, scale: 0.5 }}
+    whileInView={{ opacity: 1, scale: 1 }}
+    viewport={{ once: true }}
+    transition={{ duration: 0.4, delay: 0.1 + i * 0.05 }}
+   src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${item.seed}&smile=1`}
+    alt="Happy Client"
+    className={`absolute hidden md:flex z-20 rounded-full border-2 border-primary/40 shadow-lg ${item.size} ${item.top}`}
+  />
+))}
+
+
+          {/* ===== Main Card ===== */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="relative px-8 py-8 border glass rounded-3xl border-primary/20 md:px-16 group"
+          >
+            {/* Glow */}
+            <div className="absolute transition-opacity duration-500 opacity-0 -inset-1 group-hover:opacity-100 bg-gradient-to-r from-primary/10 to-secondary/10 blur-2xl rounded-3xl -z-10" />
+
+            {/* ===== Row ===== */}
+            <div className="flex items-center justify-between gap-2">
+
+              {/* LEFT BUTTON */}
+              <motion.button
+                whileHover={{ scale: 1.1, x: -4 }}
+                whileTap={{ scale: 0.95 }}
+                className="items-center justify-center hidden w-12 h-12 border rounded-full md:flex border-primary/40 bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:border-primary/70"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </motion.button>
+
+              {/* CENTER CONTENT */}
+              <div className="flex flex-col items-center max-w-3xl mx-auto text-center">
+
+                {/* Main Avatar */}
+                <motion.div whileHover={{ scale: 1.08 }} className="relative mb-2">
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/30 to-secondary/30 blur-2xl" />
+                  <img
+                    src="/jd.png"
+                    alt="Jashank Desai"
+                    className="relative z-10 object-cover w-48 h-48 border-2 rounded-full shadow-2xl border-primary"
+                  />
+
+                </motion.div>
+
+                {/* Author */}
+                <h4 className="text-2xl font-bold text-white font-orbitron">
+                  Jashank Desai 
+                </h4>
+                <p className="text-lg font-semibold text-primary ">
+                  CEO & Founder
+                </p>
+                <p className=" text-[16px] mb-1 bg-purple-100 py-1 px-4 font-orbitron rounded-2xl text-black font-bold">
+                  Protonix AI Pvt. Ltd. 
+                </p>
+                <p className="mb-1 text-[16px] py-1 px-4 rounded-2xl font-orbitron text-white font-bold">
+                  United States of America 
+                </p>
+
+                {/* Review */}
+                <p className="mb-3 text-base italic leading-relaxed md:text-lg text-neutral-200">
+              "Working with Codenix Labs was a great experience. They handled our entire UI/UX with clarity, creativity, and strong attention to detail. The team was responsive, open to feedback, and consistently delivered high-quality designs on time. Their sense of micro-interactions and smooth communication really stood out. I highly recommend Codenix Labs for top-tier UI/UX work and look forward to collaborating again."
+                </p>
+
+                {/* Rating */}
+                <div className="flex justify-center gap-1">
+                  {[...Array(5)].map((_, i) => (
+                    <span key={i} className="text-3xl text-yellow-400">★</span>
+                  ))}
+                </div>
+              </div>
+
+              {/* RIGHT BUTTON */}
+              <motion.button
+                whileHover={{ scale: 1.1, x: 4 }}
+                whileTap={{ scale: 0.95 }}
+                className="items-center justify-center hidden w-12 h-12 border rounded-full md:flex border-primary/40 bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:border-primary/70"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </motion.button>
+
+            </div>
+          </motion.div>
+        </div>
+      </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section className="relative py-20 bg-neutral-900">
+        <div className="absolute inset-0 bg-glow opacity-20"></div>
+        
+        <div className="container relative z-10 px-4 mx-auto sm:px-6 lg:px-8">
+          <div className="mb-16 text-center">
+            <motion.h2 
+              className="section-title neon-text"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+            >
+              Frequently Asked Questions
+            </motion.h2>
+            <motion.p 
+              className="section-subtitle"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
+              Get answers to the most common questions about our services and process
+            </motion.p>
+          </div>
+          
+          <FAQAccordion />
+        </div>
+      </section>
+      
+      {/* CTA Section */}
+      <section className="relative py-20">
+        <div className="absolute inset-0 bg-glow opacity-20"></div>
+        
+        <div className="container relative z-10 px-4 mx-auto sm:px-6 lg:px-8">
+          <div className="max-w-5xl mx-auto">
+            <div className="relative p-8 overflow-hidden glass md:p-12 rounded-xl">
+              {/* Background decorative elements */}
+              <div className="absolute w-40 h-40 rounded-full -top-20 -right-20 bg-primary/20 blur-3xl"></div>
+              <div className="absolute w-40 h-40 rounded-full -bottom-20 -left-20 bg-secondary/20 blur-3xl"></div>
+              
+              <div className="flex flex-col items-center justify-between gap-8 md:flex-row">
+                <div className="text-center md:text-left">
+                  <h2 className="mb-4 text-2xl font-bold md:text-3xl font-orbitron">
+                    Ready to bring your ideas to life?
+                  </h2>
+                  <p className="mb-0 text-neutral-300 md:max-w-xl">
+                    Let's collaborate to create a digital solution that exceeds your expectations 
+                    and helps your business thrive in the digital landscape.
+                  </p>
+                </div>
+                
+                <Link 
+                  to="/contact" 
+                  className="btn btn-primary neon-border whitespace-nowrap hover-effect"
+                >
+                  Get in Touch
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </motion.div>
+  );
+};
+
+export default Home;
