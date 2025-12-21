@@ -1,4 +1,4 @@
-import type { BlogPost, BlogCategory } from "../types/blog"
+import type { BlogPost, BlogCategory, BackendBlogPost, Pagination } from "../types/blog"
 
 // API base URL - adjust this to match your backend
 const API_BASE_URL = `${import.meta.env.VITE_API_BASE_URL}/api/blogs`
@@ -31,7 +31,7 @@ const apiCall = async (endpoint: string, options: RequestInit = {}) => {
 }
 
 // Transform backend data to frontend format
-const transformBlogPost = (backendPost: any): BlogPost => {
+const transformBlogPost = (backendPost: BackendBlogPost): BlogPost => {
   return {
     _id: backendPost._id,
     title: backendPost.title,
@@ -106,7 +106,7 @@ export class BlogService {
     search?: string
     limit?: number
     page?: number
-  }): Promise<{ posts: BlogPost[]; total: number; pagination: any }> {
+  }): Promise<{ posts: BlogPost[]; total: number; pagination: Pagination }> {
     try {
       const params = new URLSearchParams()
 
@@ -303,7 +303,7 @@ export class BlogService {
 
   static async updatePost(id: string, postData: Partial<BlogPost>): Promise<BlogPost | null> {
     try {
-      const backendData: any = {}
+      const backendData: Partial<BackendBlogPost> = {}
 
       if (postData.title) backendData.title = postData.title
       if (postData.slug) backendData.slug = postData.slug
@@ -355,7 +355,7 @@ export class BlogService {
     query: string,
     limit = 10,
     page = 1,
-  ): Promise<{ posts: BlogPost[]; total: number; pagination: any }> {
+  ): Promise<{ posts: BlogPost[]; total: number; pagination: Pagination }> {
     try {
       const response = await apiCall(`/search/posts?q=${encodeURIComponent(query)}&limit=${limit}&page=${page}`)
 
@@ -395,7 +395,7 @@ export class BlogService {
     category: string,
     limit = 10,
     page = 1,
-  ): Promise<{ posts: BlogPost[]; total: number; pagination: any }> {
+  ): Promise<{ posts: BlogPost[]; total: number; pagination: Pagination }> {
     try {
       const response = await apiCall(`/category/${encodeURIComponent(category)}?limit=${limit}&page=${page}`)
 
@@ -420,7 +420,7 @@ export class BlogService {
     author: string,
     limit = 10,
     page = 1,
-  ): Promise<{ posts: BlogPost[]; total: number; pagination: any }> {
+  ): Promise<{ posts: BlogPost[]; total: number; pagination: Pagination }> {
     try {
       const response = await apiCall(`/author/${encodeURIComponent(author)}?limit=${limit}&page=${page}`)
 
@@ -445,7 +445,7 @@ export class BlogService {
     tag: string,
     limit = 10,
     page = 1,
-  ): Promise<{ posts: BlogPost[]; total: number; pagination: any }> {
+  ): Promise<{ posts: BlogPost[]; total: number; pagination: Pagination }> {
     try {
       const response = await apiCall(`/tag/${encodeURIComponent(tag)}?limit=${limit}&page=${page}`)
 

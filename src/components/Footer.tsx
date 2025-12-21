@@ -1,10 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import logo from "../Asset/codenix.svg"
 import { 
-  Code2, 
   Mail, 
-  MapPin, 
   Phone, 
   Instagram, 
   Twitter, 
