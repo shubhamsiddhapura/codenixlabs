@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { gsap } from 'gsap';
-import img from "../Asset/codenix.svg"
 
 const LoadingScreen: React.FC = () => {
   const loadingRef = useRef<HTMLDivElement>(null);

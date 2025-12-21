@@ -2,68 +2,63 @@ import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { Link } from 'react-router-dom';
 import {
   Award,
   Users,
   Lightbulb,
-  Target,
-  CheckCircle
+  Target
 } from 'lucide-react';
-
-import Timeline from '../components/Timeline';
-import TeamMember from '../components/TeamMember';
 
 // Register ScrollTrigger
 gsap.registerPlugin(ScrollTrigger);
 
-// Sample team members data
-const teamMembers = [
-  {
-    name: "Alex Morgan",
-    position: "Founder & CEO",
-    image: "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    bio: "With over 15 years of experience in the tech industry, Alex leads our company vision and strategy.",
-    social: {
-      twitter: "#",
-      linkedin: "#",
-      github: "#"
-    }
-  },
-  {
-    name: "Sarah Chen",
-    position: "CTO",
-    image: "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    bio: "Sarah oversees our technology direction and ensures we stay at the cutting edge of innovation.",
-    social: {
-      twitter: "#",
-      linkedin: "#",
-      github: "#"
-    }
-  },
-  {
-    name: "Michael Rodriguez",
-    position: "Lead Designer",
-    image: "https://images.pexels.com/photos/1681010/pexels-photo-1681010.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    bio: "Michael brings creativity and user-centered design principles to every project we undertake.",
-    social: {
-      twitter: "#",
-      linkedin: "#",
-      github: "#"
-    }
-  },
-  {
-    name: "Emma Johnson",
-    position: "Development Lead",
-    image: "https://images.pexels.com/photos/3771839/pexels-photo-3771839.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    bio: "Emma leads our development team, ensuring we deliver high-quality code and exceptional user experiences.",
-    social: {
-      twitter: "#",
-      linkedin: "#",
-      github: "#"
-    }
-  }
-];
+// Sample team members data (kept for future use but not currently displayed)
+// const teamMembers = [
+//   {
+//     name: "Alex Morgan",
+//     position: "Founder & CEO",
+//     image: "https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
+//     bio: "With over 15 years of experience in the tech industry, Alex leads our company vision and strategy.",
+//     social: {
+//       twitter: "#",
+//       linkedin: "#",
+//       github: "#"
+//     }
+//   },
+//   {
+//     name: "Sarah Chen",
+//     position: "CTO",
+//     image: "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
+//     bio: "Sarah oversees our technology direction and ensures we stay at the cutting edge of innovation.",
+//     social: {
+//       twitter: "#",
+//       linkedin: "#",
+//       github: "#"
+//     }
+//   },
+//   {
+//     name: "Michael Rodriguez",
+//     position: "Lead Designer",
+//     image: "https://images.pexels.com/photos/1681010/pexels-photo-1681010.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
+//     bio: "Michael brings creativity and user-centered design principles to every project we undertake.",
+//     social: {
+//       twitter: "#",
+//       linkedin: "#",
+//       github: "#"
+//     }
+//   },
+//   {
+//     name: "Emma Johnson",
+//     position: "Development Lead",
+//     image: "https://images.pexels.com/photos/3771839/pexels-photo-3771839.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
+//     bio: "Emma leads our development team, ensuring we deliver high-quality code and exceptional user experiences.",
+//     social: {
+//       twitter: "#",
+//       linkedin: "#",
+//       github: "#"
+//     }
+//   }
+// ];
 
 // Values data
 const values = [

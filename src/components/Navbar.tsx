@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
-import logo from "../Asset/codenix.svg"
 
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
