@@ -58,7 +58,7 @@ const projects: Project[] = [
     title: "eBuddy - Recommerce Platform",
     description: "Ebuddy turns your old electronics into new opportunities — get the best price from trusted shopkeepers in just a few clicks.",
     category: "Websites",
-    image: "/src/Asset/portfolio/websites/ebuddy.png",
+    image: "/portfolio/websites/ebuddy.png",
     technologies: ["React", "TypeScript", "Node.js", "MongoDB", "Socket.io"],
     link: "https://www.ebuddyy.com/",
   },
@@ -598,9 +598,8 @@ const GraphicModal: React.FC<{
                 <button
                   key={i}
                   onClick={() => setCurrentIndex(i)}
-                  className={`w-2 h-2 rounded-full transition-all cursor-pointer ${
-                    currentIndex === i ? 'bg-primary w-6' : 'bg-white/50 hover:bg-white/80'
-                  }`}
+                  className={`w-2 h-2 rounded-full transition-all cursor-pointer ${currentIndex === i ? 'bg-primary w-6' : 'bg-white/50 hover:bg-white/80'
+                    }`}
                 />
               ))}
             </div>
