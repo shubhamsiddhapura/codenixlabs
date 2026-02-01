@@ -5,7 +5,6 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import {
   ExternalLink,
-  Github,
   X,
   ChevronLeft,
   ChevronRight,
@@ -548,7 +547,7 @@ const GraphicModal: React.FC<{
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         transition={{ duration: 0.3 }}
-        className="relative z-10 max-w-5xl w-full cursor-auto"
+        className="relative z-10 max-w-5xl w-full max-h-[90vh] overflow-y-auto cursor-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button - Inside Modal */}
@@ -566,7 +565,7 @@ const GraphicModal: React.FC<{
               key={currentIndex}
               src={project.images[currentIndex]}
               alt={`${project.title} - ${hasMultipleImages ? `Image ${currentIndex + 1}` : ''}`}
-              className="w-full h-auto max-h-[85vh] object-contain"
+              className="w-full h-auto max-h-[70vh] md:max-h-[85vh] object-contain"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -574,61 +573,73 @@ const GraphicModal: React.FC<{
             />
           </AnimatePresence>
 
-          {/* Navigation Arrows - Only show if multiple images */}
+          {/* Navigation Arrows - Larger for mobile */}
           {hasMultipleImages && (
             <>
               <button
                 onClick={handlePrev}
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-neutral-900/80 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+                className="absolute left-2 md:left-3 top-1/2 -translate-y-1/2 w-12 h-12 md:w-10 md:h-10 rounded-full bg-neutral-900/90 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-800 transition-colors cursor-pointer shadow-lg"
               >
-                <ChevronLeft size={20} />
+                <ChevronLeft size={24} className="md:w-5 md:h-5" />
               </button>
               <button
                 onClick={handleNext}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-neutral-900/80 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+                className="absolute right-2 md:right-3 top-1/2 -translate-y-1/2 w-12 h-12 md:w-10 md:h-10 rounded-full bg-neutral-900/90 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-800 transition-colors cursor-pointer shadow-lg"
               >
-                <ChevronRight size={20} />
+                <ChevronRight size={24} className="md:w-5 md:h-5" />
               </button>
             </>
           )}
 
-          {/* Dots Indicator - Only show if multiple images */}
+          {/* Dots Indicator - Better positioned for mobile */}
           {hasMultipleImages && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+            <div className="absolute bottom-3 md:bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-neutral-900/70 backdrop-blur-sm px-3 py-2 rounded-full">
               {project.images.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => setCurrentIndex(i)}
-                  className={`w-2 h-2 rounded-full transition-all cursor-pointer ${currentIndex === i ? 'bg-primary w-6' : 'bg-white/50 hover:bg-white/80'
-                    }`}
+                  className={`w-2 h-2 rounded-full transition-all cursor-pointer ${
+                    currentIndex === i ? 'bg-primary w-6' : 'bg-white/50 hover:bg-white/80'
+                  }`}
                 />
               ))}
             </div>
           )}
 
-          {/* Image Counter for visiting cards and flyers */}
+          {/* Image Counter - Top left, smaller on mobile */}
           {hasMultipleImages && (
-            <div className="absolute top-4 left-4 px-3 py-1.5 bg-neutral-900/80 backdrop-blur-sm rounded-full text-white text-sm">
+            <div className="absolute top-3 md:top-4 left-3 md:left-4 px-2.5 py-1.5 md:px-3 md:py-1.5 bg-neutral-900/80 backdrop-blur-sm rounded-full text-white text-xs md:text-sm">
               {currentIndex + 1} / {project.images.length}
               {project.type === 'Visiting Card' && (
-                <span className="ml-2 text-neutral-400">
+                <span className="ml-1.5 md:ml-2 text-neutral-400 hidden sm:inline">
                   ({currentIndex === 0 ? 'Front' : 'Back'})
                 </span>
               )}
             </div>
           )}
+        </div>
 
-          {/* Title & Description Overlay - Bottom */}
-          <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-neutral-900/80 via-neutral-900/40 to-transparent">
-            <div className="max-w-3xl">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-primary text-xs font-medium uppercase tracking-wider">
-                  {project.type}
-                </span>
-              </div>
-              <h3 className="text-xl font-orbitron font-bold text-white mb-1.5 drop-shadow-lg">{project.title}</h3>
-              <p className="text-sm text-neutral-200 leading-relaxed drop-shadow-md">{project.description}</p>
+        {/* Title & Description - Below image on mobile, overlay on desktop */}
+        <div className="block md:hidden p-4 bg-neutral-900">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-primary text-xs font-medium uppercase tracking-wider">
+              {project.type}
+            </span>
+          </div>
+          <h3 className="text-lg font-orbitron font-bold text-white mb-2">{project.title}</h3>
+          <p className="text-sm text-neutral-300 leading-relaxed">{project.description}</p>
+        </div>
+
+        {/* Desktop overlay - Hidden on mobile */}
+        <div className="hidden md:block absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-neutral-900/80 via-neutral-900/40 to-transparent pointer-events-none">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-primary text-xs font-medium uppercase tracking-wider">
+                {project.type}
+              </span>
             </div>
+            <h3 className="text-xl font-orbitron font-bold text-white mb-1.5 drop-shadow-lg">{project.title}</h3>
+            <p className="text-sm text-neutral-200 leading-relaxed drop-shadow-md">{project.description}</p>
           </div>
         </div>
       </motion.div>
