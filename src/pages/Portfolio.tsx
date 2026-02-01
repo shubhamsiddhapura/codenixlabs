@@ -70,10 +70,10 @@ const projects: Project[] = [
     description: "Modern dating application UI/UX design focused on meaningful connections and user safety.",
     category: "UI / UX Design",
     images: [
-      "src/Asset/portfolio/ui-ux/link-n-date/link-n-date-1.jpeg",
-      "src/Asset/portfolio/ui-ux/link-n-date/link-n-date-2.png",
-      "src/Asset/portfolio/ui-ux/link-n-date/link-n-date-3.jpeg",
-      "src/Asset/portfolio/ui-ux/link-n-date/link-n-date-4.jpeg"
+      "/portfolio/ui-ux/link-n-date/link-n-date-1.png",
+      "/portfolio/ui-ux/link-n-date/link-n-date-2.jpeg",
+      "/portfolio/ui-ux/link-n-date/link-n-date-3.jpeg",
+      "/portfolio/ui-ux/link-n-date/link-n-date-4.jpeg"
     ],
     platform: "Mobile",
     tools: ["Figma", "Adobe XD", "Principle"],
@@ -85,7 +85,7 @@ const projects: Project[] = [
     title: "Postura Brand Logo",
     description: "Professional logo design for Postura physiotherapy brand",
     category: "Graphic Design",
-    images: ["/src/Asset/portfolio/graphicDesign/postura_logo/Postura_By_Physio_png.png"],
+    images: ["/portfolio/graphicDesign/postura_logo/Postura_By_Physio_png.png"],
     type: "Logo"
   },
   {
@@ -94,8 +94,8 @@ const projects: Project[] = [
     description: "Premium visiting card design with front and back layouts for Postura physiotherapy clinic",
     category: "Graphic Design",
     images: [
-      "/src/Asset/portfolio/graphicDesign/postura_visiting_card/visiting_card_front.png",
-      "/src/Asset/portfolio/graphicDesign/postura_visiting_card/visting_card_back.png"
+      "/portfolio/graphicDesign/postura_visiting_card/visiting_card_front.png",
+      "/portfolio/graphicDesign/postura_visiting_card/visting_card_back.png"
     ],
     type: "Visiting Card"
   },
@@ -105,8 +105,8 @@ const projects: Project[] = [
     description: "Creative promotional flyer designs for Postura physiotherapy services",
     category: "Graphic Design",
     images: [
-      "/src/Asset/portfolio/graphicDesign/posture_flyers/postura_1.jpeg",
-      "/src/Asset/portfolio/graphicDesign/posture_flyers/postura_2.jpeg"
+      "/portfolio/graphicDesign/posture_flyers/postura_1.jpeg",
+      "/portfolio/graphicDesign/posture_flyers/postura_2.jpeg"
     ],
     type: "Flyer"
   }

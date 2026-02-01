@@ -246,7 +246,7 @@ const Home: React.FC = () => {
             >
               <Link to="/portfolio" className="block w-full h-full">
                 <img
-                  src="/src/Asset/portfolio/websites/ebuddy.png"
+                  src="/portfolio/websites/ebuddy.png" 
                   alt="Web Development"
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
@@ -275,7 +275,7 @@ const Home: React.FC = () => {
             >
               <Link to="/portfolio" className="block w-full h-full">
                 <img
-                  src="src\Asset\portfolio\ui-ux\link-n-date\link-n-date-2.png"
+                  src="/portfolio/ui-ux/link-n-date/link-n-date-1.png" 
                   alt="UI/UX Design"
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
@@ -304,7 +304,7 @@ const Home: React.FC = () => {
             >
               <Link to="/portfolio" className="block w-full h-full">
                 <img
-                  src="/src/Asset/portfolio/graphicDesign/postura_logo/Postura_By_Physio_png.png"
+                  src="/portfolio/graphicDesign/postura_logo/Postura_By_Physio_png.png" 
                   alt="Graphic Design"
                   className="w-full h-full object-contain bg-neutral-900 transition-transform duration-500 group-hover:scale-110"
                 />
