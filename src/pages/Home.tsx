@@ -275,7 +275,7 @@ const Home: React.FC = () => {
             >
               <Link to="/portfolio" className="block w-full h-full">
                 <img
-                  src="/portfolio/ui-ux/link-n-date/link-n-date-1.png" 
+                  src="/portfolio/ui-ux/link-n-date/link-n-date-1.jpeg" 
                   alt="UI/UX Design"
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />

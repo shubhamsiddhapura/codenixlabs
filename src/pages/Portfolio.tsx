@@ -70,8 +70,8 @@ const projects: Project[] = [
     description: "Modern dating application UI/UX design focused on meaningful connections and user safety.",
     category: "UI / UX Design",
     images: [
-      "/portfolio/ui-ux/link-n-date/link-n-date-1.png",
-      "/portfolio/ui-ux/link-n-date/link-n-date-2.jpeg",
+      "/portfolio/ui-ux/link-n-date/link-n-date-1.jpeg",
+      "/portfolio/ui-ux/link-n-date/link-n-date-2.png",
       "/portfolio/ui-ux/link-n-date/link-n-date-3.jpeg",
       "/portfolio/ui-ux/link-n-date/link-n-date-4.jpeg"
     ],
@@ -260,10 +260,10 @@ const UIUXModal: React.FC<{
         className="relative z-10 w-full max-w-6xl max-h-[90vh] overflow-hidden rounded-2xl glass cursor-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close Button */}
+        {/* Close Button - Inside Modal */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-neutral-800/80 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-700 transition-colors cursor-pointer"
+          className="absolute top-4 right-4 z-30 w-10 h-10 rounded-full bg-neutral-800/90 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-700 transition-colors cursor-pointer shadow-lg"
         >
           <X size={20} />
         </button>
@@ -425,19 +425,19 @@ const WebsiteModal: React.FC<{
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         transition={{ duration: 0.3 }}
-        className="relative z-10 w-full max-w-4xl overflow-hidden rounded-2xl glass cursor-auto"
+        className="relative z-10 w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-2xl glass cursor-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close Button */}
+        {/* Close Button - Inside Modal */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-neutral-800/80 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-700 transition-colors cursor-pointer"
+          className="absolute top-4 right-4 z-30 w-10 h-10 rounded-full bg-neutral-800/90 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-700 transition-colors cursor-pointer shadow-lg"
         >
           <X size={20} />
         </button>
 
         {/* Image */}
-        <div className="relative w-full h-64 sm:h-80 lg:h-96 bg-neutral-900">
+        <div className="relative w-full h-56 sm:h-72 md:h-80 lg:h-96 bg-neutral-900 flex-shrink-0">
           <img
             src={project.image}
             alt={project.title}
@@ -448,7 +448,7 @@ const WebsiteModal: React.FC<{
         {/* Content */}
         <div className="p-6 lg:p-8">
           <span className="text-primary text-sm font-medium mb-2 block">Website</span>
-          <h2 className="text-2xl lg:text-3xl font-orbitron font-bold mb-4">{project.title}</h2>
+          <h2 className="text-2xl lg:text-3xl font-orbitron font-bold mb-3">{project.title}</h2>
 
           <p className="text-neutral-300 mb-6 leading-relaxed">{project.description}</p>
 
@@ -467,7 +467,7 @@ const WebsiteModal: React.FC<{
           </div>
 
           {/* Links */}
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             {project.link && (
               <a
                 href={project.link}
@@ -548,25 +548,25 @@ const GraphicModal: React.FC<{
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         transition={{ duration: 0.3 }}
-        className="relative z-10 max-w-4xl max-h-[90vh] cursor-auto"
+        className="relative z-10 max-w-5xl w-full cursor-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close Button */}
+        {/* Close Button - Inside Modal */}
         <button
           onClick={onClose}
-          className="absolute -top-12 right-0 w-10 h-10 rounded-full bg-neutral-800/80 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-700 transition-colors cursor-pointer"
+          className="absolute top-4 right-4 z-30 w-10 h-10 rounded-full bg-neutral-800/90 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-700 transition-colors cursor-pointer shadow-lg"
         >
           <X size={20} />
         </button>
 
         {/* Image Container with Carousel */}
-        <div className="relative rounded-xl overflow-hidden bg-neutral-900">
+        <div className="relative rounded-xl overflow-hidden bg-neutral-900 shadow-2xl">
           <AnimatePresence mode="wait">
             <motion.img
               key={currentIndex}
               src={project.images[currentIndex]}
               alt={`${project.title} - ${hasMultipleImages ? `Image ${currentIndex + 1}` : ''}`}
-              className="w-full h-auto max-h-[80vh] object-contain"
+              className="w-full h-auto max-h-[85vh] object-contain"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -608,7 +608,7 @@ const GraphicModal: React.FC<{
 
           {/* Image Counter for visiting cards and flyers */}
           {hasMultipleImages && (
-            <div className="absolute top-4 right-4 px-3 py-1.5 bg-neutral-900/80 backdrop-blur-sm rounded-full text-white text-sm">
+            <div className="absolute top-4 left-4 px-3 py-1.5 bg-neutral-900/80 backdrop-blur-sm rounded-full text-white text-sm">
               {currentIndex + 1} / {project.images.length}
               {project.type === 'Visiting Card' && (
                 <span className="ml-2 text-neutral-400">
@@ -617,15 +617,19 @@ const GraphicModal: React.FC<{
               )}
             </div>
           )}
-        </div>
 
-        {/* Caption */}
-        <div className="mt-4 text-center">
-          <span className="text-primary text-xs font-medium uppercase tracking-wider">
-            {project.type}
-          </span>
-          <h3 className="text-lg font-orbitron font-bold text-white mt-1">{project.title}</h3>
-          <p className="text-sm text-neutral-400 mt-1">{project.description}</p>
+          {/* Title & Description Overlay - Bottom */}
+          <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-neutral-900/80 via-neutral-900/40 to-transparent">
+            <div className="max-w-3xl">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-primary text-xs font-medium uppercase tracking-wider">
+                  {project.type}
+                </span>
+              </div>
+              <h3 className="text-xl font-orbitron font-bold text-white mb-1.5 drop-shadow-lg">{project.title}</h3>
+              <p className="text-sm text-neutral-200 leading-relaxed drop-shadow-md">{project.description}</p>
+            </div>
+          </div>
         </div>
       </motion.div>
     </motion.div>
