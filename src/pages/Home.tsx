@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Link } from 'react-router-dom';
-import { Smartphone, Globe, Palette , BrainCircuit, ChevronDown, ChevronUp } from 'lucide-react';
+import { Smartphone, Globe, Palette, BrainCircuit, ChevronDown, ChevronUp } from 'lucide-react';
 
 import HeroSection from '../components/HeroSection';
 import ServiceCard from '../components/ServiceCard';
@@ -98,7 +98,7 @@ const FAQAccordion: React.FC = () => {
               )}
             </div>
           </button>
-          
+
           <motion.div
             initial={false}
             animate={{
@@ -153,12 +153,12 @@ const Home: React.FC = () => {
         }
       );
     });
-    
+
     return () => {
       ScrollTrigger.getAll().forEach(trigger => trigger.kill());
     };
   }, []);
-  
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -168,12 +168,12 @@ const Home: React.FC = () => {
     >
       {/* Hero Section */}
       <HeroSection />
-      
+
       {/* Services Section */}
       <section className="relative py-20">
         <div className="container px-4 mx-auto sm:px-6 lg:px-8">
           <div className="mb-16 text-center">
-            <motion.h2 
+            <motion.h2
               className="section-title neon-text"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -182,7 +182,7 @@ const Home: React.FC = () => {
             >
               Our Services
             </motion.h2>
-            <motion.p 
+            <motion.p
               className="section-subtitle"
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
@@ -192,10 +192,10 @@ const Home: React.FC = () => {
               We deliver cutting-edge solutions tailored to your business needs
             </motion.p>
           </div>
-          
+
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
             {services.map((service, index) => (
-              <ServiceCard 
+              <ServiceCard
                 key={service.title}
                 title={service.title}
                 description={service.description}
@@ -206,15 +206,153 @@ const Home: React.FC = () => {
           </div>
         </div>
       </section>
-      
+
+      {/* Portfolio Showcase Section */}
+      <section className="relative py-24 overflow-hidden grid-bg">
+        <div className="absolute inset-0 bg-glow opacity-30"></div>
+
+        <div className="container relative z-10 px-4 mx-auto sm:px-6 lg:px-8">
+          {/* Section Header */}
+          <div className="max-w-3xl mx-auto mb-16 text-center">
+            <motion.h2
+              className="text-4xl md:text-5xl font-orbitron font-bold mb-6"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+            >
+              Our Work <span className="text-primary">Speaks for Itself</span>
+            </motion.h2>
+            <motion.p
+              className="text-xl text-neutral-300"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
+              Transforming ideas into exceptional digital experiences
+            </motion.p>
+          </div>
+
+          {/* Portfolio Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            {/* Website Development */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="group relative overflow-hidden rounded-2xl aspect-[4/3] cursor-pointer"
+            >
+              <Link to="/portfolio" className="block w-full h-full">
+                <img
+                  src="/src/Asset/portfolio/websites/ebuddy.png"
+                  alt="Web Development"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/60 to-transparent"></div>
+                <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors duration-300"></div>
+                <div className="absolute bottom-0 left-0 right-0 p-6">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Globe className="text-primary" size={20} />
+                    <span className="text-xs font-medium text-primary uppercase tracking-wider">Websites</span>
+                  </div>
+                  <h3 className="text-xl font-orbitron font-bold text-white mb-1">eBuddy Platform</h3>
+                  <p className="text-sm text-neutral-300 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    Social networking platform
+                  </p>
+                </div>
+              </Link>
+            </motion.div>
+
+            {/* UI/UX Design */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="group relative overflow-hidden rounded-2xl aspect-[4/3] cursor-pointer"
+            >
+              <Link to="/portfolio" className="block w-full h-full">
+                <img
+                  src="src\Asset\portfolio\ui-ux\link-n-date\link-n-date-2.png"
+                  alt="UI/UX Design"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/60 to-transparent"></div>
+                <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors duration-300"></div>
+                <div className="absolute bottom-0 left-0 right-0 p-6">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Smartphone className="text-primary" size={20} />
+                    <span className="text-xs font-medium text-primary uppercase tracking-wider">UI/UX Design</span>
+                  </div>
+                  <h3 className="text-xl font-orbitron font-bold text-white mb-1">Link N Date</h3>
+                  <p className="text-sm text-neutral-300 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    Modern dating app interface
+                  </p>
+                </div>
+              </Link>
+            </motion.div>
+
+            {/* Graphic Design */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="group relative overflow-hidden rounded-2xl aspect-[4/3] cursor-pointer"
+            >
+              <Link to="/portfolio" className="block w-full h-full">
+                <img
+                  src="/src/Asset/portfolio/graphicDesign/postura_logo/Postura_By_Physio_png.png"
+                  alt="Graphic Design"
+                  className="w-full h-full object-contain bg-neutral-900 transition-transform duration-500 group-hover:scale-110"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/60 to-transparent"></div>
+                <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors duration-300"></div>
+                <div className="absolute bottom-0 left-0 right-0 p-6">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Palette className="text-primary" size={20} />
+                    <span className="text-xs font-medium text-primary uppercase tracking-wider">Graphic Design</span>
+                  </div>
+                  <h3 className="text-xl font-orbitron font-bold text-white mb-1">Postura Branding</h3>
+                  <p className="text-sm text-neutral-300 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    Complete brand identity
+                  </p>
+                </div>
+              </Link>
+            </motion.div>
+          </div>
+
+          {/* CTA Button */}
+          <motion.div
+            className="text-center"
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+          >
+            <Link
+              to="/portfolio"
+              className="inline-flex items-center gap-2 px-8 py-4 text-lg font-medium bg-primary text-white rounded-full hover:bg-primary/90 transition-all duration-300 hover:shadow-lg hover:shadow-primary/25 hover:scale-105"
+            >
+              View All Projects
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+            </Link>
+          </motion.div>
+        </div>
+      </section>
+
       {/* Featured Blog Posts */}
       {featuredPosts.length > 0 && (
         <section className="relative py-20 bg-neutral-900">
           <div className="absolute inset-0 bg-glow opacity-20"></div>
-          
+
           <div className="container relative z-10 px-4 mx-auto sm:px-6 lg:px-8">
             <div className="mb-16 text-center">
-              <motion.h2 
+              <motion.h2
                 className="section-title neon-text"
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -223,7 +361,7 @@ const Home: React.FC = () => {
               >
                 Latest Insights
               </motion.h2>
-              <motion.p 
+              <motion.p
                 className="section-subtitle"
                 initial={{ opacity: 0 }}
                 whileInView={{ opacity: 1 }}
@@ -233,13 +371,13 @@ const Home: React.FC = () => {
                 Stay updated with the latest trends and insights from our experts
               </motion.p>
             </div>
-            
+
             <div className="grid grid-cols-1 gap-8 mb-12 md:grid-cols-2 lg:grid-cols-3">
               {featuredPosts.map((post, index) => (
                 <BlogCard key={post._id} post={post} index={index} featured />
               ))}
             </div>
-            
+
             <div className="text-center">
               <Link to="/blog" className="btn btn-outline neon-border hover-effect">
                 View All Articles
@@ -248,12 +386,12 @@ const Home: React.FC = () => {
           </div>
         </section>
       )}
-      
+
       {/* Technology Showcase */}
       <section className="relative py-20 overflow-hidden">
         <div className="container relative z-10 px-4 mx-auto sm:px-6 lg:px-8">
           <div className="mb-16 text-center">
-            <motion.h2 
+            <motion.h2
               className="section-title neon-text"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -262,7 +400,7 @@ const Home: React.FC = () => {
             >
               Technologies We Excel In
             </motion.h2>
-            <motion.p 
+            <motion.p
               className="section-subtitle"
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
@@ -272,16 +410,16 @@ const Home: React.FC = () => {
               Advanced tools and modern frameworks that drive our creative solutions
             </motion.p>
           </div>
-          
+
           {/* Moving Technology Row */}
           <div className="relative">
             <div className="flex overflow-hidden">
               <div className="flex animate-scroll-left">
                 {[
-                  'React', 'Node.js', 'TypeScript', 'JavaScript', 
-                   'Angular', 'Next.js', 'Vue.js',
-                  'React', 'Node.js', 'TypeScript', 'JavaScript', 
-                   'Angular' ,'Next.js', 'Vue.js'
+                  'React', 'Node.js', 'TypeScript', 'JavaScript',
+                  'Angular', 'Next.js', 'Vue.js',
+                  'React', 'Node.js', 'TypeScript', 'JavaScript',
+                  'Angular', 'Next.js', 'Vue.js'
                 ].map((tech, index) => (
                   <div
                     key={index}
@@ -294,19 +432,19 @@ const Home: React.FC = () => {
                 ))}
               </div>
             </div>
-            
+
             {/* Gradient overlays for smooth edges */}
             <div className="absolute top-0 left-0 z-10 w-32 h-full bg-gradient-to-r from-background to-transparent"></div>
             <div className="absolute top-0 right-0 z-10 w-32 h-full bg-gradient-to-l from-background to-transparent"></div>
           </div>
-          
+
           {/* Second row moving in opposite direction */}
           <div className="relative mt-8">
             <div className="flex overflow-hidden">
               <div className="flex animate-scroll-right">
                 {[
                   'MongoDB', 'Flutter', 'Firebase', 'Python', 'Django', 'Docker', 'AWS',
-                   'MongoDB', 'Flutter', 'Firebase', 'Python', 'Django', 'Docker', 'AWS',
+                  'MongoDB', 'Flutter', 'Firebase', 'Python', 'Django', 'Docker', 'AWS',
                 ].map((tech, index) => (
                   <div
                     key={index}
@@ -319,14 +457,14 @@ const Home: React.FC = () => {
                 ))}
               </div>
             </div>
-            
+
             {/* Gradient overlays for smooth edges */}
             <div className="absolute top-0 left-0 z-10 w-32 h-full bg-gradient-to-r from-background to-transparent"></div>
             <div className="absolute top-0 right-0 z-10 w-32 h-full bg-gradient-to-l from-background to-transparent"></div>
           </div>
         </div>
       </section>
-      
+
       {/* Testimonials Section */}
       <section className="relative py-20 overflow-hidden">
         {/* Animated Stars Background */}
@@ -380,145 +518,145 @@ const Home: React.FC = () => {
 
         <div className="container relative z-10 px-4 py-auto sm:px-6 lg:px-8">
 
-        {/* ===== Heading ===== */}
-        <div className="text-center ">
-          <motion.h2
-            className="section-title neon-text"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-          >
-            What Our Clients Say
-          </motion.h2>
+          {/* ===== Heading ===== */}
+          <div className="text-center ">
+            <motion.h2
+              className="section-title neon-text"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+            >
+              What Our Clients Say
+            </motion.h2>
 
-          <motion.p
-            className="section-subtitle"
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-          >
-            Trusted by founders and fast-growing companies worldwide
-          </motion.p>
-        </div>
+            <motion.p
+              className="section-subtitle"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
+              Trusted by founders and fast-growing companies worldwide
+            </motion.p>
+          </div>
 
-        {/* ===== Wrapper ===== */}
-        <div className="relative max-w-5xl mx-auto">
+          {/* ===== Wrapper ===== */}
+          <div className="relative max-w-5xl mx-auto">
 
-          {/* ===== Floating Avatars ===== */}
-         {[
-  { top: "top-6 left-12", size: "w-14 h-14", seed: "client1" },
-  { top: "top-20 left-36", size: "w-12 h-12", seed: "client2" },
-  { top: "top-10 right-36", size: "w-14 h-14", seed: "client3" },
-  { top: "top-24 right-12", size: "w-12 h-12", seed: "client4" },
-  { top: "bottom-16 right-20", size: "w-14 h-14", seed: "client5" },
-  { top: "bottom-20 left-20", size: "w-12 h-12", seed: "client6" },
-  { top: "bottom-8 left-1/3", size: "w-10 h-10", seed: "client7" },
-].map((item, i) => (
-  <motion.img
-    key={i}
-    initial={{ opacity: 0, scale: 0.5 }}
-    whileInView={{ opacity: 1, scale: 1 }}
-    viewport={{ once: true }}
-    transition={{ duration: 0.4, delay: 0.1 + i * 0.05 }}
-   src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${item.seed}&smile=1`}
-    alt="Happy Client"
-    className={`absolute hidden md:flex z-20 rounded-full border-2 border-primary/40 shadow-lg ${item.size} ${item.top}`}
-  />
-))}
+            {/* ===== Floating Avatars ===== */}
+            {[
+              { top: "top-6 left-12", size: "w-14 h-14", seed: "client1" },
+              { top: "top-20 left-36", size: "w-12 h-12", seed: "client2" },
+              { top: "top-10 right-36", size: "w-14 h-14", seed: "client3" },
+              { top: "top-24 right-12", size: "w-12 h-12", seed: "client4" },
+              { top: "bottom-16 right-20", size: "w-14 h-14", seed: "client5" },
+              { top: "bottom-20 left-20", size: "w-12 h-12", seed: "client6" },
+              { top: "bottom-8 left-1/3", size: "w-10 h-10", seed: "client7" },
+            ].map((item, i) => (
+              <motion.img
+                key={i}
+                initial={{ opacity: 0, scale: 0.5 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: 0.1 + i * 0.05 }}
+                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${item.seed}&smile=1`}
+                alt="Happy Client"
+                className={`absolute hidden md:flex z-20 rounded-full border-2 border-primary/40 shadow-lg ${item.size} ${item.top}`}
+              />
+            ))}
 
 
-          {/* ===== Main Card ===== */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="relative px-8 py-8 border glass rounded-3xl border-primary/20 md:px-16 group"
-          >
-            {/* Glow */}
-            <div className="absolute transition-opacity duration-500 opacity-0 -inset-1 group-hover:opacity-100 bg-gradient-to-r from-primary/10 to-secondary/10 blur-2xl rounded-3xl -z-10" />
+            {/* ===== Main Card ===== */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="relative px-8 py-8 border glass rounded-3xl border-primary/20 md:px-16 group"
+            >
+              {/* Glow */}
+              <div className="absolute transition-opacity duration-500 opacity-0 -inset-1 group-hover:opacity-100 bg-gradient-to-r from-primary/10 to-secondary/10 blur-2xl rounded-3xl -z-10" />
 
-            {/* ===== Row ===== */}
-            <div className="flex items-center justify-between gap-2">
+              {/* ===== Row ===== */}
+              <div className="flex items-center justify-between gap-2">
 
-              {/* LEFT BUTTON */}
-              <motion.button
-                whileHover={{ scale: 1.1, x: -4 }}
-                whileTap={{ scale: 0.95 }}
-                className="items-center justify-center hidden w-12 h-12 border rounded-full md:flex border-primary/40 bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:border-primary/70"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </motion.button>
+                {/* LEFT BUTTON */}
+                <motion.button
+                  whileHover={{ scale: 1.1, x: -4 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="items-center justify-center hidden w-12 h-12 border rounded-full md:flex border-primary/40 bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:border-primary/70"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </motion.button>
 
-              {/* CENTER CONTENT */}
-              <div className="flex flex-col items-center max-w-3xl mx-auto text-center">
+                {/* CENTER CONTENT */}
+                <div className="flex flex-col items-center max-w-3xl mx-auto text-center">
 
-                {/* Main Avatar */}
-                <motion.div whileHover={{ scale: 1.08 }} className="relative mb-2">
-                  <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/30 to-secondary/30 blur-2xl" />
-                  <img
-                    src="/jd.png"
-                    alt="Jashank Desai"
-                    className="relative z-10 object-cover w-48 h-48 border-2 rounded-full shadow-2xl border-primary"
-                  />
+                  {/* Main Avatar */}
+                  <motion.div whileHover={{ scale: 1.08 }} className="relative mb-2">
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/30 to-secondary/30 blur-2xl" />
+                    <img
+                      src="/jd.png"
+                      alt="Jashank Desai"
+                      className="relative z-10 object-cover w-48 h-48 border-2 rounded-full shadow-2xl border-primary"
+                    />
 
-                </motion.div>
+                  </motion.div>
 
-                {/* Author */}
-                <h4 className="text-2xl font-bold text-white font-orbitron">
-                  Jashank Desai 
-                </h4>
-                <p className="text-lg font-semibold text-primary ">
-                  CEO & Founder
-                </p>
-                <p className=" text-[16px] mb-1 bg-purple-100 py-1 px-4 font-orbitron rounded-2xl text-black font-bold">
-                  Protonix AI Pvt. Ltd. 
-                </p>
-                <p className="mb-1 text-[16px] py-1 px-4 rounded-2xl font-orbitron text-white font-bold">
-                  United States of America 
-                </p>
+                  {/* Author */}
+                  <h4 className="text-2xl font-bold text-white font-orbitron">
+                    Jashank Desai
+                  </h4>
+                  <p className="text-lg font-semibold text-primary ">
+                    CEO & Founder
+                  </p>
+                  <p className=" text-[16px] mb-1 bg-purple-100 py-1 px-4 font-orbitron rounded-2xl text-black font-bold">
+                    Protonix AI Pvt. Ltd.
+                  </p>
+                  <p className="mb-1 text-[16px] py-1 px-4 rounded-2xl font-orbitron text-white font-bold">
+                    United States of America
+                  </p>
 
-                {/* Review */}
-                <p className="mb-3 text-base italic leading-relaxed md:text-lg text-neutral-200">
-              "Working with Codenix Labs was a great experience. They handled our entire UI/UX with clarity, creativity, and strong attention to detail. The team was responsive, open to feedback, and consistently delivered high-quality designs on time. Their sense of micro-interactions and smooth communication really stood out. I highly recommend Codenix Labs for top-tier UI/UX work and look forward to collaborating again."
-                </p>
+                  {/* Review */}
+                  <p className="mb-3 text-base italic leading-relaxed md:text-lg text-neutral-200">
+                    "Working with Codenix Labs was a great experience. They handled our entire UI/UX with clarity, creativity, and strong attention to detail. The team was responsive, open to feedback, and consistently delivered high-quality designs on time. Their sense of micro-interactions and smooth communication really stood out. I highly recommend Codenix Labs for top-tier UI/UX work and look forward to collaborating again."
+                  </p>
 
-                {/* Rating */}
-                <div className="flex justify-center gap-1">
-                  {[...Array(5)].map((_, i) => (
-                    <span key={i} className="text-3xl text-yellow-400">★</span>
-                  ))}
+                  {/* Rating */}
+                  <div className="flex justify-center gap-1">
+                    {[...Array(5)].map((_, i) => (
+                      <span key={i} className="text-3xl text-yellow-400">★</span>
+                    ))}
+                  </div>
                 </div>
+
+                {/* RIGHT BUTTON */}
+                <motion.button
+                  whileHover={{ scale: 1.1, x: 4 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="items-center justify-center hidden w-12 h-12 border rounded-full md:flex border-primary/40 bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:border-primary/70"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </motion.button>
+
               </div>
-
-              {/* RIGHT BUTTON */}
-              <motion.button
-                whileHover={{ scale: 1.1, x: 4 }}
-                whileTap={{ scale: 0.95 }}
-                className="items-center justify-center hidden w-12 h-12 border rounded-full md:flex border-primary/40 bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:border-primary/70"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </motion.button>
-
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </div>
-      </div>
       </section>
 
       {/* FAQ Section */}
       <section className="relative py-20 bg-neutral-900">
         <div className="absolute inset-0 bg-glow opacity-20"></div>
-        
+
         <div className="container relative z-10 px-4 mx-auto sm:px-6 lg:px-8">
           <div className="mb-16 text-center">
-            <motion.h2 
+            <motion.h2
               className="section-title neon-text"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -527,7 +665,7 @@ const Home: React.FC = () => {
             >
               Frequently Asked Questions
             </motion.h2>
-            <motion.p 
+            <motion.p
               className="section-subtitle"
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
@@ -537,35 +675,35 @@ const Home: React.FC = () => {
               Get answers to the most common questions about our services and process
             </motion.p>
           </div>
-          
+
           <FAQAccordion />
         </div>
       </section>
-      
+
       {/* CTA Section */}
       <section className="relative py-20">
         <div className="absolute inset-0 bg-glow opacity-20"></div>
-        
+
         <div className="container relative z-10 px-4 mx-auto sm:px-6 lg:px-8">
           <div className="max-w-5xl mx-auto">
             <div className="relative p-8 overflow-hidden glass md:p-12 rounded-xl">
               {/* Background decorative elements */}
               <div className="absolute w-40 h-40 rounded-full -top-20 -right-20 bg-primary/20 blur-3xl"></div>
               <div className="absolute w-40 h-40 rounded-full -bottom-20 -left-20 bg-secondary/20 blur-3xl"></div>
-              
+
               <div className="flex flex-col items-center justify-between gap-8 md:flex-row">
                 <div className="text-center md:text-left">
                   <h2 className="mb-4 text-2xl font-bold md:text-3xl font-orbitron">
                     Ready to bring your ideas to life?
                   </h2>
                   <p className="mb-0 text-neutral-300 md:max-w-xl">
-                    Let's collaborate to create a digital solution that exceeds your expectations 
+                    Let's collaborate to create a digital solution that exceeds your expectations
                     and helps your business thrive in the digital landscape.
                   </p>
                 </div>
-                
-                <Link 
-                  to="/contact" 
+
+                <Link
+                  to="/contact"
                   className="btn btn-primary neon-border whitespace-nowrap hover-effect"
                 >
                   Get in Touch

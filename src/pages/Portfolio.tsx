@@ -1,124 +1,649 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import ProjectCard, { ProjectCardProps } from '../components/ProjectCard';
+import {
+  ExternalLink,
+  Github,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Monitor,
+  Smartphone,
+  ArrowRight
+} from 'lucide-react';
 
 // Register ScrollTrigger
 gsap.registerPlugin(ScrollTrigger);
 
-// Sample project data
-const projects: ProjectCardProps[] = [
+// ============== TYPES ==============
+type ProjectCategory = 'All' | 'Websites' | 'UI / UX Design' | 'Graphic Design';
+
+interface BaseProject {
+  id: number;
+  title: string;
+  description: string;
+  category: ProjectCategory;
+}
+
+interface WebsiteProject extends BaseProject {
+  category: 'Websites';
+  image: string;
+  technologies: string[];
+  link?: string;
+  githubLink?: string;
+}
+
+interface UIUXProject extends BaseProject {
+  category: 'UI / UX Design';
+  images: string[];
+  platform: 'Web' | 'Mobile' | 'Web & Mobile';
+  tools: string[];
+  projectGoal: string;
+}
+
+interface GraphicProject extends BaseProject {
+  category: 'Graphic Design';
+  images: string[]; // Support multiple images for flyers, visiting cards (front/back), etc.
+  type: 'Flyer' | 'Poster' | 'Visiting Card' | 'Social Creative' | 'Branding' | 'Logo';
+}
+
+type Project = WebsiteProject | UIUXProject | GraphicProject;
+
+// ============== SAMPLE DATA ==============
+const projects: Project[] = [
+  // Website Projects
   {
     id: 1,
-    title: "Fintech Dashboard",
-    description: "A comprehensive financial analytics platform with real-time data visualization, transaction management, and investment tracking.",
-    category: "Web Application",
-    image: "https://images.pexels.com/photos/7433823/pexels-photo-7433823.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    technologies: ["React", "TypeScript", "D3.js", "Node.js", "MongoDB"],
-    link: "#",
-    githubLink: "#"
+    title: "eBuddy - Recommerce Platform",
+    description: "Ebuddy turns your old electronics into new opportunities — get the best price from trusted shopkeepers in just a few clicks.",
+    category: "Websites",
+    image: "/src/Asset/portfolio/websites/ebuddy.png",
+    technologies: ["React", "TypeScript", "Node.js", "MongoDB", "Socket.io"],
+    link: "https://www.ebuddyy.com/",
   },
+  // UI/UX Projects
   {
     id: 2,
-    title: "E-Commerce Platform",
-    description: "A fully responsive e-commerce solution with inventory management, secure payment processing, and customer relationship tools.",
-    category: "Web & Mobile",
-    image: "https://images.pexels.com/photos/8386365/pexels-photo-8386365.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    technologies: ["React", "Redux", "Node.js", "Express", "PostgreSQL", "Stripe"],
-    link: "#",
-    githubLink: "#"
+    title: "Link N Date - Dating App",
+    description: "Modern dating application UI/UX design focused on meaningful connections and user safety.",
+    category: "UI / UX Design",
+    images: [
+      "src/Asset/portfolio/ui-ux/link-n-date/link-n-date-1.jpeg",
+      "src/Asset/portfolio/ui-ux/link-n-date/link-n-date-2.png",
+      "src/Asset/portfolio/ui-ux/link-n-date/link-n-date-3.jpeg",
+      "src/Asset/portfolio/ui-ux/link-n-date/link-n-date-4.jpeg"
+    ],
+    platform: "Mobile",
+    tools: ["Figma", "Adobe XD", "Principle"],
+    projectGoal: "Create an intuitive and safe dating experience that focuses on genuine connections and user verification."
   },
+  // Graphic Design Projects
   {
     id: 3,
-    title: "Health & Fitness App",
-    description: "A mobile application for tracking fitness goals, nutrition, and personal wellness with customized workout plans and progress analytics.",
-    category: "Mobile Application",
-    image: "https://images.pexels.com/photos/7948063/pexels-photo-7948063.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    technologies: ["React Native", "Firebase", "Redux", "GraphQL"],
-    link: "#",
-    githubLink: "#"
+    title: "Postura Brand Logo",
+    description: "Professional logo design for Postura physiotherapy brand",
+    category: "Graphic Design",
+    images: ["/src/Asset/portfolio/graphicDesign/postura_logo/Postura_By_Physio_png.png"],
+    type: "Logo"
   },
   {
     id: 4,
-    title: "Smart Home IoT System",
-    description: "An integrated IoT platform connecting smart home devices with an intuitive dashboard for monitoring and controlling all aspects of home automation.",
-    category: "IoT Solution",
-    image: "https://images.pexels.com/photos/1181316/pexels-photo-1181316.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    technologies: ["Arduino", "Raspberry Pi", "MQTT", "React", "Node.js"],
-    link: "#"
+    title: "Postura Visiting Cards",
+    description: "Premium visiting card design with front and back layouts for Postura physiotherapy clinic",
+    category: "Graphic Design",
+    images: [
+      "/src/Asset/portfolio/graphicDesign/postura_visiting_card/visiting_card_front.png",
+      "/src/Asset/portfolio/graphicDesign/postura_visiting_card/visting_card_back.png"
+    ],
+    type: "Visiting Card"
   },
   {
     id: 5,
-    title: "Corporate Branding Suite",
-    description: "A complete brand identity redesign including logo, style guide, marketing materials, and website for a corporate client in the technology sector.",
-    category: "UI/UX Design",
-    image: "https://images.pexels.com/photos/3861958/pexels-photo-3861958.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    technologies: ["Figma", "Adobe CC", "Webflow", "Brand Strategy"],
-    link: "#"
-  },
-  {
-    id: 6,
-    title: "Logistics Management System",
-    description: "An enterprise solution for logistics companies to optimize routes, track shipments, and manage inventory across multiple warehouses.",
-    category: "Web Application",
-    image: "https://images.pexels.com/photos/7648066/pexels-photo-7648066.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    technologies: ["Angular", "Java Spring Boot", "PostgreSQL", "Docker", "AWS"],
-    link: "#"
-  },
-  {
-    id: 7,
-    title: "AR Retail Experience",
-    description: "An augmented reality application allowing customers to visualize products in their own space before making purchase decisions.",
-    category: "AR/VR",
-    image: "https://images.pexels.com/photos/8728388/pexels-photo-8728388.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    technologies: ["Unity", "ARKit", "ARCore", "C#", "3D Modeling"],
-    link: "#"
-  },
-  {
-    id: 8,
-    title: "Educational Learning Platform",
-    description: "A comprehensive e-learning platform with course management, interactive lessons, assessment tools, and student progress tracking.",
-    category: "Web Application",
-    image: "https://images.pexels.com/photos/5428830/pexels-photo-5428830.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    technologies: ["React", "Node.js", "MongoDB", "Socket.io", "AWS"],
-    link: "#",
-    githubLink: "#"
-  },
-  {
-    id: 9,
-    title: "Crypto Wallet & Exchange",
-    description: "A secure cryptocurrency wallet and exchange platform with real-time price tracking, portfolio management, and trading capabilities.",
-    category: "Web & Mobile",
-    image: "https://images.pexels.com/photos/8358095/pexels-photo-8358095.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
-    technologies: ["React Native", "Node.js", "Blockchain API", "WebSockets"],
-    link: "#"
+    title: "Postura Marketing Flyers",
+    description: "Creative promotional flyer designs for Postura physiotherapy services",
+    category: "Graphic Design",
+    images: [
+      "/src/Asset/portfolio/graphicDesign/posture_flyers/postura_1.jpeg",
+      "/src/Asset/portfolio/graphicDesign/posture_flyers/postura_2.jpeg"
+    ],
+    type: "Flyer"
   }
 ];
 
-const Portfolio: React.FC = () => {
-  const [filteredProjects, setFilteredProjects] = useState(projects);
-  const [activeFilter, setActiveFilter] = useState("All");
-  
-  // Get unique categories for filter buttons
-  const categories = ["All", ...Array.from(new Set(projects.map(item => item.category)))];
-  
-  // Filter projects based on selected category
-  const handleFilterClick = (category: string) => {
-    setActiveFilter(category);
-    
-    if (category === "All") {
-      setFilteredProjects(projects);
-      return;
-    }
-    
-    const filtered = projects.filter(project => project.category === category);
-    setFilteredProjects(filtered);
-  };
-  
+const categories: ProjectCategory[] = ['All', 'Websites', 'UI / UX Design', 'Graphic Design'];
+
+// Helper function to get preview image
+const getPreviewImage = (project: Project): string => {
+  if (project.category === 'UI / UX Design' || project.category === 'Graphic Design') {
+    return project.images[0];
+  }
+  return project.image;
+};
+
+// Helper function to get category label
+const getCategoryLabel = (category: ProjectCategory): string => {
+  if (category === 'UI / UX Design') return 'UI/UX';
+  if (category === 'Graphic Design') return 'Graphic';
+  return category;
+};
+
+// ============== UNIFIED PROJECT CARD ==============
+const ProjectCard: React.FC<{
+  project: Project;
+  index: number;
+  onClick: () => void;
+}> = ({ project, index, onClick }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.4, delay: index * 0.05 }}
+      className="group relative overflow-hidden rounded-xl cursor-pointer aspect-[4/3]"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={onClick}
+    >
+      {/* Project Image */}
+      <motion.img
+        src={getPreviewImage(project)}
+        alt={project.title}
+        className="absolute inset-0 w-full h-full object-cover"
+        animate={{ scale: isHovered ? 1.05 : 1 }}
+        transition={{ duration: 0.4 }}
+      />
+
+      {/* Gradient Overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/40 to-transparent" />
+
+      {/* Hover Overlay */}
+      <motion.div
+        className="absolute inset-0 bg-primary/10"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isHovered ? 1 : 0 }}
+        transition={{ duration: 0.3 }}
+      />
+
+      {/* Category Tag */}
+      <div className="absolute top-4 left-4">
+        <span className="px-3 py-1 text-xs font-medium bg-neutral-900/80 backdrop-blur-sm rounded-full text-white border border-neutral-700">
+          {getCategoryLabel(project.category)}
+        </span>
+      </div>
+
+      {/* Content */}
+      <div className="absolute bottom-0 left-0 right-0 p-5">
+        <h3 className="text-lg font-orbitron font-bold text-white mb-1 line-clamp-1">
+          {project.title}
+        </h3>
+
+        {/* View indicator on hover */}
+        <motion.div
+          className="flex items-center gap-1 text-primary text-sm font-medium"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: isHovered ? 1 : 0, y: isHovered ? 0 : 10 }}
+          transition={{ duration: 0.2 }}
+        >
+          View Project <ArrowRight size={14} />
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+};
+
+// ============== UI/UX PROJECT MODAL ==============
+const UIUXModal: React.FC<{
+  project: UIUXProject | null;
+  onClose: () => void;
+}> = ({ project, onClose }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const handlePrev = useCallback(() => {
+    if (!project) return;
+    setCurrentIndex((prev) => (prev === 0 ? project.images.length - 1 : prev - 1));
+  }, [project]);
+
+  const handleNext = useCallback(() => {
+    if (!project) return;
+    setCurrentIndex((prev) => (prev === project.images.length - 1 ? 0 : prev + 1));
+  }, [project]);
+
+  // Keyboard & scroll lock
   useEffect(() => {
-    // Animate section headers on scroll
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') handlePrev();
+      if (e.key === 'ArrowRight') handleNext();
+    };
+
+    if (project) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'unset';
+    };
+  }, [project, handlePrev, handleNext, onClose]);
+
+  // Reset index when project changes
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [project]);
+
+  if (!project) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 cursor-pointer"
+      onClick={onClose}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-background/95 backdrop-blur-md" />
+
+      {/* Modal Content */}
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ duration: 0.3 }}
+        className="relative z-10 w-full max-w-6xl max-h-[90vh] overflow-hidden rounded-2xl glass cursor-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-neutral-800/80 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-700 transition-colors cursor-pointer"
+        >
+          <X size={20} />
+        </button>
+
+        <div className="flex flex-col lg:flex-row h-full max-h-[90vh]">
+          {/* Image Carousel - Takes Priority */}
+          <div className="relative w-full lg:w-3/5 h-72 sm:h-96 lg:h-[80vh] bg-neutral-900 flex-shrink-0 flex items-center justify-center">
+            <AnimatePresence mode="wait">
+              <motion.img
+                key={currentIndex}
+                src={project.images[currentIndex]}
+                alt={`${project.title} - Screen ${currentIndex + 1}`}
+                className="w-full h-full object-contain"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              />
+            </AnimatePresence>
+
+            {/* Navigation Arrows */}
+            {project.images.length > 1 && (
+              <>
+                <button
+                  onClick={handlePrev}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-neutral-900/80 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <button
+                  onClick={handleNext}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-neutral-900/80 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </>
+            )}
+
+            {/* Dots Indicator */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+              {project.images.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentIndex(i)}
+                  className={`w-2 h-2 rounded-full transition-all cursor-pointer ${currentIndex === i ? 'bg-primary w-6' : 'bg-white/50 hover:bg-white/80'
+                    }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Project Info - Compact */}
+          <div className="w-full lg:w-2/5 p-6 lg:p-8 overflow-y-auto">
+            {/* Platform Badge */}
+            <div className="flex items-center gap-2 mb-3">
+              {project.platform.includes('Mobile') && <Smartphone size={16} className="text-primary" />}
+              {project.platform.includes('Web') && <Monitor size={16} className="text-primary" />}
+              <span className="text-sm text-primary font-medium">{project.platform}</span>
+            </div>
+
+            <h2 className="text-2xl lg:text-3xl font-orbitron font-bold mb-4">{project.title}</h2>
+
+            <div className="space-y-5">
+              {/* Problem → Solution */}
+              <div>
+                <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+                  The Challenge
+                </h3>
+                <p className="text-neutral-300 text-sm leading-relaxed">{project.projectGoal}</p>
+              </div>
+
+              <div>
+                <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+                  The Solution
+                </h3>
+                <p className="text-neutral-300 text-sm leading-relaxed">{project.description}</p>
+              </div>
+
+              {/* Tools */}
+              <div>
+                <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+                  Tools Used
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {project.tools.map((tool, i) => (
+                    <span key={i} className="px-3 py-1.5 bg-neutral-800 text-neutral-300 rounded-lg text-xs">
+                      {tool}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Thumbnail Navigation */}
+              <div>
+                <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">
+                  All Screens ({project.images.length})
+                </h3>
+                <div className="grid grid-cols-4 gap-2">
+                  {project.images.map((img, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setCurrentIndex(i)}
+                      className={`aspect-video rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${currentIndex === i ? 'border-primary' : 'border-transparent hover:border-neutral-600'
+                        }`}
+                    >
+                      <img src={img} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// ============== WEBSITE PROJECT MODAL ==============
+const WebsiteModal: React.FC<{
+  project: WebsiteProject | null;
+  onClose: () => void;
+}> = ({ project, onClose }) => {
+
+  // Keyboard & scroll lock
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+
+    if (project) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'unset';
+    };
+  }, [project, onClose]);
+
+  if (!project) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 cursor-pointer"
+      onClick={onClose}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-background/95 backdrop-blur-md" />
+
+      {/* Modal Content */}
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ duration: 0.3 }}
+        className="relative z-10 w-full max-w-4xl overflow-hidden rounded-2xl glass cursor-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-neutral-800/80 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-700 transition-colors cursor-pointer"
+        >
+          <X size={20} />
+        </button>
+
+        {/* Image */}
+        <div className="relative w-full h-64 sm:h-80 lg:h-96 bg-neutral-900">
+          <img
+            src={project.image}
+            alt={project.title}
+            className="w-full h-full object-cover"
+          />
+        </div>
+
+        {/* Content */}
+        <div className="p-6 lg:p-8">
+          <span className="text-primary text-sm font-medium mb-2 block">Website</span>
+          <h2 className="text-2xl lg:text-3xl font-orbitron font-bold mb-4">{project.title}</h2>
+
+          <p className="text-neutral-300 mb-6 leading-relaxed">{project.description}</p>
+
+          {/* Tech Stack */}
+          <div className="mb-6">
+            <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">
+              Tech Stack
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {project.technologies.map((tech, i) => (
+                <span key={i} className="px-3 py-1.5 bg-neutral-800 text-neutral-300 rounded-lg text-sm">
+                  {tech}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Links */}
+          <div className="flex gap-3">
+            {project.link && (
+              <a
+                href={project.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-primary flex items-center hover-effect"
+              >
+                <ExternalLink size={16} className="mr-2" /> View Live
+              </a>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// ============== GRAPHIC PROJECT MODAL ==============
+const GraphicModal: React.FC<{
+  project: GraphicProject | null;
+  onClose: () => void;
+}> = ({ project, onClose }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const handlePrev = useCallback(() => {
+    if (!project) return;
+    setCurrentIndex((prev) => (prev === 0 ? project.images.length - 1 : prev - 1));
+  }, [project]);
+
+  const handleNext = useCallback(() => {
+    if (!project) return;
+    setCurrentIndex((prev) => (prev === project.images.length - 1 ? 0 : prev + 1));
+  }, [project]);
+
+  // Keyboard & scroll lock
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') handlePrev();
+      if (e.key === 'ArrowRight') handleNext();
+    };
+
+    if (project) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'unset';
+    };
+  }, [project, handlePrev, handleNext, onClose]);
+
+  // Reset index when project changes
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [project]);
+
+  if (!project) return null;
+
+  const hasMultipleImages = project.images.length > 1;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 cursor-pointer"
+      onClick={onClose}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-background/95 backdrop-blur-md" />
+
+      {/* Modal Content */}
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ duration: 0.3 }}
+        className="relative z-10 max-w-4xl max-h-[90vh] cursor-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute -top-12 right-0 w-10 h-10 rounded-full bg-neutral-800/80 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-700 transition-colors cursor-pointer"
+        >
+          <X size={20} />
+        </button>
+
+        {/* Image Container with Carousel */}
+        <div className="relative rounded-xl overflow-hidden bg-neutral-900">
+          <AnimatePresence mode="wait">
+            <motion.img
+              key={currentIndex}
+              src={project.images[currentIndex]}
+              alt={`${project.title} - ${hasMultipleImages ? `Image ${currentIndex + 1}` : ''}`}
+              className="w-full h-auto max-h-[80vh] object-contain"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            />
+          </AnimatePresence>
+
+          {/* Navigation Arrows - Only show if multiple images */}
+          {hasMultipleImages && (
+            <>
+              <button
+                onClick={handlePrev}
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-neutral-900/80 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <button
+                onClick={handleNext}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-neutral-900/80 backdrop-blur-sm flex items-center justify-center text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </>
+          )}
+
+          {/* Dots Indicator - Only show if multiple images */}
+          {hasMultipleImages && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+              {project.images.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentIndex(i)}
+                  className={`w-2 h-2 rounded-full transition-all cursor-pointer ${currentIndex === i ? 'bg-primary w-6' : 'bg-white/50 hover:bg-white/80'
+                    }`}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Image Counter for visiting cards and flyers */}
+          {hasMultipleImages && (
+            <div className="absolute top-4 right-4 px-3 py-1.5 bg-neutral-900/80 backdrop-blur-sm rounded-full text-white text-sm">
+              {currentIndex + 1} / {project.images.length}
+              {project.type === 'Visiting Card' && (
+                <span className="ml-2 text-neutral-400">
+                  ({currentIndex === 0 ? 'Front' : 'Back'})
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Caption */}
+        <div className="mt-4 text-center">
+          <span className="text-primary text-xs font-medium uppercase tracking-wider">
+            {project.type}
+          </span>
+          <h3 className="text-lg font-orbitron font-bold text-white mt-1">{project.title}</h3>
+          <p className="text-sm text-neutral-400 mt-1">{project.description}</p>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// ============== MAIN COMPONENT ==============
+const Portfolio: React.FC = () => {
+  const [activeFilter, setActiveFilter] = useState<ProjectCategory>('All');
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+
+  // Filter projects based on category
+  const filteredProjects = activeFilter === 'All'
+    ? projects
+    : projects.filter(p => p.category === activeFilter);
+
+  useEffect(() => {
+    // Animate on scroll
     gsap.fromTo(
       '.portfolio-title',
       { y: 50, opacity: 0 },
@@ -134,12 +659,17 @@ const Portfolio: React.FC = () => {
         }
       }
     );
-    
+
     return () => {
       ScrollTrigger.getAll().forEach(trigger => trigger.kill());
     };
   }, []);
-  
+
+  // Handle project click
+  const handleProjectClick = (project: Project) => {
+    setSelectedProject(project);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -150,10 +680,10 @@ const Portfolio: React.FC = () => {
       {/* Hero Section */}
       <section className="pt-32 pb-20 relative grid-bg">
         <div className="absolute inset-0 bg-glow opacity-40"></div>
-        
+
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="max-w-3xl mx-auto text-center">
-            <motion.h1 
+            <motion.h1
               className="text-4xl sm:text-5xl md:text-6xl font-orbitron font-bold mb-6 leading-tight portfolio-title"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -161,86 +691,99 @@ const Portfolio: React.FC = () => {
             >
               Our <span className="text-primary">Portfolio</span>
             </motion.h1>
-            
-            <motion.p 
+
+            <motion.p
               className="text-xl text-neutral-300 mb-0"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.2 }}
             >
-              Explore our latest projects showcasing our expertise and creativity
-              in delivering exceptional digital solutions.
+              Explore our finest work — crafted with precision and passion.
             </motion.p>
           </div>
         </div>
       </section>
-      
-      {/* Portfolio Gallery */}
-      <section className="py-16 relative">
+
+      {/* Filter Tabs */}
+      <section className="py-8 relative">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Filter Buttons */}
-          <div className="flex flex-wrap justify-center gap-3 mb-12">
+          <div className="flex flex-wrap justify-center gap-3">
             {categories.map((category, index) => (
               <motion.button
-                key={index}
-                onClick={() => handleFilterClick(category)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 hover-effect ${
-                  activeFilter === category 
-                    ? 'bg-primary text-white' 
-                    : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                }`}
+                key={category}
+                onClick={() => setActiveFilter(category)}
+                className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-300 ${activeFilter === category
+                  ? 'bg-primary text-white shadow-lg shadow-primary/25'
+                  : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                  }`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: index * 0.1 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
               >
                 {category}
               </motion.button>
             ))}
           </div>
-          
-          {/* Projects Grid */}
-          <motion.div 
+        </div>
+      </section>
+
+      {/* Portfolio Grid - Unified Cards */}
+      <section className="py-12 relative">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
             layout
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
           >
-            <AnimatePresence>
-              {filteredProjects.map((project) => (
-                <ProjectCard key={project.id} {...project} />
+            <AnimatePresence mode="popLayout">
+              {filteredProjects.map((project, index) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  index={index}
+                  onClick={() => handleProjectClick(project)}
+                />
               ))}
             </AnimatePresence>
           </motion.div>
+
+          {/* Empty State */}
+          {filteredProjects.length === 0 && (
+            <div className="text-center py-20">
+              <p className="text-neutral-400 text-lg">No projects found in this category.</p>
+            </div>
+          )}
         </div>
       </section>
-      
+
       {/* CTA Section */}
-      <section className="py-20 bg-neutral-900 relative">
+      <section className="py-24 bg-neutral-900 relative">
         <div className="absolute inset-0 bg-glow opacity-20"></div>
-        
+
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="max-w-5xl mx-auto text-center">
+          <div className="max-w-4xl mx-auto text-center">
             <motion.h2
-              className="text-3xl md:text-4xl font-orbitron font-bold mb-6"
+              className="text-3xl md:text-4xl lg:text-5xl font-orbitron font-bold mb-6"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5 }}
             >
-              Ready to build something amazing?
+              Let's Build Something <span className="text-primary">Together</span>
             </motion.h2>
-            
+
             <motion.p
-              className="text-lg text-neutral-300 mb-8 max-w-2xl mx-auto"
+              className="text-lg text-neutral-300 mb-10 max-w-2xl mx-auto"
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: 0.2 }}
             >
-              Let's collaborate to create innovative digital solutions that
-              drive your business forward.
+              Ready to bring your vision to life? Let's collaborate to create
+              innovative digital solutions that drive your business forward.
             </motion.p>
-            
+
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -248,16 +791,44 @@ const Portfolio: React.FC = () => {
               transition={{ duration: 0.5, delay: 0.4 }}
               className="flex flex-col sm:flex-row justify-center gap-4"
             >
-              <Link to="/contact" className="btn btn-primary neon-border hover-effect">
+              <Link
+                to="/contact"
+                className="btn btn-primary neon-border hover-effect text-lg px-8 py-4"
+              >
                 Start a Project
               </Link>
-              <Link to="/services" className="btn btn-outline hover-effect">
-                Explore Our Services
+              <Link
+                to="/services"
+                className="btn btn-outline hover-effect text-lg px-8 py-4"
+              >
+                Explore Services
               </Link>
             </motion.div>
           </div>
         </div>
       </section>
+
+      {/* Modals */}
+      <AnimatePresence>
+        {selectedProject?.category === 'UI / UX Design' && (
+          <UIUXModal
+            project={selectedProject as UIUXProject}
+            onClose={() => setSelectedProject(null)}
+          />
+        )}
+        {selectedProject?.category === 'Websites' && (
+          <WebsiteModal
+            project={selectedProject as WebsiteProject}
+            onClose={() => setSelectedProject(null)}
+          />
+        )}
+        {selectedProject?.category === 'Graphic Design' && (
+          <GraphicModal
+            project={selectedProject as GraphicProject}
+            onClose={() => setSelectedProject(null)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
