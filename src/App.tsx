@@ -20,6 +20,7 @@ import AdminBlog from './pages/AdminBlog';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import CookiePolicy from './pages/CookiePolicy';
+import DemoShowcase from './pages/DemoShowcase';
 import { Analytics } from '@vercel/analytics/react';
 
 function App() {
@@ -55,6 +56,7 @@ function App() {
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/terms-of-service" element={<TermsOfService />} />
           <Route path="/cookie-policy" element={<CookiePolicy />} />
+          <Route path="/_internal/demo-showcase" element={<DemoShowcase />} />
         </Routes>
       </AnimatePresence>
       <Footer />
