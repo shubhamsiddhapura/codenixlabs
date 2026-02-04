@@ -8,8 +8,33 @@ import { Smartphone, Globe, Palette, BrainCircuit, ChevronDown, ChevronUp } from
 import HeroSection from '../components/HeroSection';
 import ServiceCard from '../components/ServiceCard';
 import BlogCard from '../components/BlogCard';
+import TestimonialCard, { Testimonial } from '../components/TestimonialCard';
 import { BlogService } from '../services/blogService';
 import { BlogPost } from '../types/blog';
+
+// Testimonials data
+const testimonials: Testimonial[] = [
+  {
+    id: 1,
+    name: "Jashank Desai",
+    role: "CEO & Founder",
+    company: "Protonix AI Pvt. Ltd.",
+    location: "United States of America",
+    image: "/jd.png",
+    review: "Working with Codenix Labs was a great experience. They handled our entire UI/UX with clarity, creativity, and strong attention to detail. The team was responsive, open to feedback, and consistently delivered high-quality designs on time. Their sense of micro-interactions and smooth communication really stood out. I highly recommend Codenix Labs for top-tier UI/UX work and look forward to collaborating again.",
+    rating: 5
+  },
+  {
+    id: 2,
+    name: "Dr. Priyanshi Pandya (PT)",
+    role: "Founder",
+    company: "Postura By Physio",
+    location: "India",
+    image: "/portfolio/testimonials/posturaByPhysio/postura_by-physio.png",
+    review: "Working with Codenix Labs was a great experience. They designed our logo and flyers with clarity, creativity, and a strong sense of market understanding, using color palettes that perfectly balanced calmness and energy. The team took time to understand our domain, delivering modern, versatile designs that truly stand out. They were professional, responsive, open to feedback, and consistently delivered high-quality work ahead of schedule. I highly recommend Codenix Labs and look forward to collaborating again.",
+    rating: 5
+  }
+];
 
 // Register ScrollTrigger
 gsap.registerPlugin(ScrollTrigger);
@@ -248,7 +273,7 @@ const Home: React.FC = () => {
                 <img
                   src="/portfolio/websites/ebuddy.png"
                   alt="Web Development"
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/60 to-transparent"></div>
                 <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors duration-300"></div>
@@ -516,10 +541,10 @@ const Home: React.FC = () => {
           }}
         />
 
-        <div className="container relative z-10 px-4 py-auto sm:px-6 lg:px-8">
+        <div className="container relative z-10 px-4 mx-auto sm:px-6 lg:px-8">
 
-          {/* ===== Heading ===== */}
-          <div className="text-center ">
+          {/* Heading */}
+          <div className="mb-12 text-center">
             <motion.h2
               className="section-title neon-text"
               initial={{ opacity: 0, y: 20 }}
@@ -541,112 +566,8 @@ const Home: React.FC = () => {
             </motion.p>
           </div>
 
-          {/* ===== Wrapper ===== */}
-          <div className="relative max-w-5xl mx-auto">
-
-            {/* ===== Floating Avatars ===== */}
-            {[
-              { top: "top-6 left-12", size: "w-14 h-14", seed: "client1" },
-              { top: "top-20 left-36", size: "w-12 h-12", seed: "client2" },
-              { top: "top-10 right-36", size: "w-14 h-14", seed: "client3" },
-              { top: "top-24 right-12", size: "w-12 h-12", seed: "client4" },
-              { top: "bottom-16 right-20", size: "w-14 h-14", seed: "client5" },
-              { top: "bottom-20 left-20", size: "w-12 h-12", seed: "client6" },
-              { top: "bottom-8 left-1/3", size: "w-10 h-10", seed: "client7" },
-            ].map((item, i) => (
-              <motion.img
-                key={i}
-                initial={{ opacity: 0, scale: 0.5 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.4, delay: 0.1 + i * 0.05 }}
-                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${item.seed}&smile=1`}
-                alt="Happy Client"
-                className={`absolute hidden md:flex z-20 rounded-full border-2 border-primary/40 shadow-lg ${item.size} ${item.top}`}
-              />
-            ))}
-
-
-            {/* ===== Main Card ===== */}
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6 }}
-              className="relative px-8 py-8 border glass rounded-3xl border-primary/20 md:px-16 group"
-            >
-              {/* Glow */}
-              <div className="absolute transition-opacity duration-500 opacity-0 -inset-1 group-hover:opacity-100 bg-gradient-to-r from-primary/10 to-secondary/10 blur-2xl rounded-3xl -z-10" />
-
-              {/* ===== Row ===== */}
-              <div className="flex items-center justify-between gap-2">
-
-                {/* LEFT BUTTON */}
-                <motion.button
-                  whileHover={{ scale: 1.1, x: -4 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="items-center justify-center hidden w-12 h-12 border rounded-full md:flex border-primary/40 bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:border-primary/70"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </motion.button>
-
-                {/* CENTER CONTENT */}
-                <div className="flex flex-col items-center max-w-3xl mx-auto text-center">
-
-                  {/* Main Avatar */}
-                  <motion.div whileHover={{ scale: 1.08 }} className="relative mb-2">
-                    <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/30 to-secondary/30 blur-2xl" />
-                    <img
-                      src="/jd.png"
-                      alt="Jashank Desai"
-                      className="relative z-10 object-cover w-48 h-48 border-2 rounded-full shadow-2xl border-primary"
-                    />
-
-                  </motion.div>
-
-                  {/* Author */}
-                  <h4 className="text-2xl font-bold text-white font-orbitron">
-                    Jashank Desai
-                  </h4>
-                  <p className="text-lg font-semibold text-primary ">
-                    CEO & Founder
-                  </p>
-                  <p className=" text-[16px] mb-1 bg-purple-100 py-1 px-4 font-orbitron rounded-2xl text-black font-bold">
-                    Protonix AI Pvt. Ltd.
-                  </p>
-                  <p className="mb-1 text-[16px] py-1 px-4 rounded-2xl font-orbitron text-white font-bold">
-                    United States of America
-                  </p>
-
-                  {/* Review */}
-                  <p className="mb-3 text-base italic leading-relaxed md:text-lg text-neutral-200">
-                    "Working with Codenix Labs was a great experience. They handled our entire UI/UX with clarity, creativity, and strong attention to detail. The team was responsive, open to feedback, and consistently delivered high-quality designs on time. Their sense of micro-interactions and smooth communication really stood out. I highly recommend Codenix Labs for top-tier UI/UX work and look forward to collaborating again."
-                  </p>
-
-                  {/* Rating */}
-                  <div className="flex justify-center gap-1">
-                    {[...Array(5)].map((_, i) => (
-                      <span key={i} className="text-3xl text-yellow-400">★</span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* RIGHT BUTTON */}
-                <motion.button
-                  whileHover={{ scale: 1.1, x: 4 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="items-center justify-center hidden w-12 h-12 border rounded-full md:flex border-primary/40 bg-gradient-to-r from-primary/20 to-secondary/20 text-primary hover:border-primary/70"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </motion.button>
-
-              </div>
-            </motion.div>
-          </div>
+          {/* Testimonial Card Component */}
+          <TestimonialCard testimonials={testimonials} />
         </div>
       </section>
 

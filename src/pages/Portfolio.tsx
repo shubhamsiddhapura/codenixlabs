@@ -438,7 +438,7 @@ const WebsiteModal: React.FC<{
         {/* Image */}
         <div className="relative w-full h-56 sm:h-72 md:h-80 lg:h-96 bg-neutral-900 flex-shrink-0">
           <img
-            src={project.image}
+            src="/portfolio/websites/ebuddy2.png"
             alt={project.title}
             className="w-full h-full object-cover"
           />
