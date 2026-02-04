@@ -9,7 +9,6 @@ import HeroSection from '../components/HeroSection';
 import ServiceCard from '../components/ServiceCard';
 import BlogCard from '../components/BlogCard';
 import TestimonialCard, { Testimonial } from '../components/TestimonialCard';
-import BrochureModal from '../components/BrochureModal';
 import { BlogService } from '../services/blogService';
 import { BlogPost } from '../types/blog';
 
@@ -148,7 +147,6 @@ const FAQAccordion: React.FC = () => {
 };
 const Home: React.FC = () => {
   const [featuredPosts, setFeaturedPosts] = React.useState<BlogPost[]>([]);
-  const [isBrochureOpen, setIsBrochureOpen] = React.useState(false);
 
   useEffect(() => {
     // Load featured blog posts
@@ -369,22 +367,21 @@ const Home: React.FC = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
               </Link>
-              <button
-                onClick={() => setIsBrochureOpen(true)}
+              <a
+                href="/brochure/brouchure.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-8 py-4 text-lg font-medium bg-transparent text-white border-2 border-primary rounded-full hover:bg-primary/10 transition-all duration-300 hover:shadow-lg hover:shadow-primary/25 hover:scale-105"
               >
                 View Brochure
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-              </button>
+              </a>
             </div>
           </motion.div>
         </div>
       </section>
-
-      {/* Brochure Modal */}
-      <BrochureModal isOpen={isBrochureOpen} onClose={() => setIsBrochureOpen(false)} />
 
       {/* Featured Blog Posts */}
       {featuredPosts.length > 0 && (
