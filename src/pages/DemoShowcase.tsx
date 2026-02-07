@@ -59,8 +59,9 @@ const graphicCategories: GraphicCategory[] = [
   {
     title: 'Festival Cards',
     images: [
-      'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=800&auto=format&fit=crop&q=80',
-      'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=800&auto=format&fit=crop&q=80'
+      '/festival_post/deals_pouch_dhanteras_post.png',
+      '/festival_post/codenix_labs_diwali_post.png',
+      '/festival_post/Ebuddyy_Navratri_post.png',
     ]
   },
   {
@@ -121,11 +122,10 @@ const DemoShowcase: React.FC = () => {
           <div className="flex flex-wrap justify-center gap-3">
             <motion.button
               onClick={() => setActiveTab('demos')}
-              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-300 ${
-                activeTab === 'demos'
-                  ? 'bg-primary text-white shadow-lg shadow-primary/25'
-                  : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-              }`}
+              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-300 ${activeTab === 'demos'
+                ? 'bg-primary text-white shadow-lg shadow-primary/25'
+                : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                }`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0 }}
@@ -136,11 +136,10 @@ const DemoShowcase: React.FC = () => {
             </motion.button>
             <motion.button
               onClick={() => setActiveTab('designs')}
-              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-300 ${
-                activeTab === 'designs'
-                  ? 'bg-primary text-white shadow-lg shadow-primary/25'
-                  : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-              }`}
+              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-300 ${activeTab === 'designs'
+                ? 'bg-primary text-white shadow-lg shadow-primary/25'
+                : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                }`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.1 }}
@@ -442,7 +441,7 @@ const ImageGalleryModal: React.FC<ImageGalleryModalProps> = ({ gallery, onClose 
   if (!gallery) return null;
 
   const imageCount = gallery.images.length;
-  
+
   // Determine modal width based on image count
   const getModalWidthClass = () => {
     if (imageCount === 1) return 'max-w-fit';
@@ -514,9 +513,8 @@ const ImageGalleryModal: React.FC<ImageGalleryModalProps> = ({ gallery, onClose 
                     <img
                       src={image}
                       alt={`${gallery.title} ${index + 1}`}
-                      className={`h-auto object-contain transition-transform duration-500 group-hover:scale-105 ${
-                        imageCount === 1 ? 'max-h-[70vh] w-auto' : 'w-full max-h-[60vh]'
-                      }`}
+                      className={`h-auto object-contain transition-transform duration-500 group-hover:scale-105 ${imageCount === 1 ? 'max-h-[70vh] w-auto' : 'w-full max-h-[60vh]'
+                        }`}
                     />
                     {/* Overlay on Hover */}
                     <div className="absolute inset-0 bg-gradient-to-t from-background/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
