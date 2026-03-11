@@ -162,7 +162,7 @@ const Home: React.FC = () => {
     loadFeaturedPosts();
 
     // Parallax effect on scroll for featured projects
-    gsap.utils.toArray('.project-card').forEach((element, i) => {
+    (gsap.utils.toArray('.project-card') as HTMLElement[]).forEach((element, i) => {
       gsap.fromTo(
         element,
         { y: i % 2 === 0 ? 100 : 0 },
@@ -205,7 +205,7 @@ const Home: React.FC = () => {
               viewport={{ once: true }}
               transition={{ duration: 0.5 }}
             >
-              Our Services
+              Our Core Services
             </motion.h2>
             <motion.p
               className="section-subtitle"
@@ -214,7 +214,7 @@ const Home: React.FC = () => {
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: 0.2 }}
             >
-              We deliver cutting-edge solutions tailored to your business needs
+              As a leading software development company, we deliver high-performance development solutions.
             </motion.p>
           </div>
 
@@ -272,7 +272,8 @@ const Home: React.FC = () => {
               <Link to="/portfolio" className="block w-full h-full">
                 <img
                   src="/portfolio/websites/ebuddy.png"
-                  alt="Web Development"
+                  alt="eBuddy Social Networking Platform - High-Performance Web Development by Codenix Labs"
+                  loading="lazy"
                   className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/60 to-transparent"></div>
@@ -301,7 +302,8 @@ const Home: React.FC = () => {
               <Link to="/portfolio" className="block w-full h-full">
                 <img
                   src="/portfolio/ui-ux/link-n-date/link-n-date-2.png"
-                  alt="UI/UX Design"
+                  alt="Link N Date - Modern UI/UX Design for Dating Apps by Codenix Labs"
+                  loading="lazy"
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/60 to-transparent"></div>
@@ -330,7 +332,8 @@ const Home: React.FC = () => {
               <Link to="/portfolio" className="block w-full h-full">
                 <img
                   src="/portfolio/graphicDesign/postura_logo/Postura_By_Physio_png.png"
-                  alt="Graphic Design"
+                  alt="Postura Branding & Logo Design - Creative Graphic Design by Codenix Labs"
+                  loading="lazy"
                   className="w-full h-full object-contain bg-neutral-900 transition-transform duration-500 group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/60 to-transparent"></div>
@@ -360,10 +363,11 @@ const Home: React.FC = () => {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 to="/portfolio"
+                aria-label="View all web and app development projects"
                 className="inline-flex items-center gap-2 px-8 py-4 text-lg font-medium bg-primary text-white rounded-full hover:bg-primary/90 transition-all duration-300 hover:shadow-lg hover:shadow-primary/25 hover:scale-105"
               >
                 View All Projects
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
               </Link>
@@ -436,7 +440,7 @@ const Home: React.FC = () => {
               viewport={{ once: true }}
               transition={{ duration: 0.5 }}
             >
-              Technologies We Excel In
+              Modern Technologies for Scalable Solutions
             </motion.h2>
             <motion.p
               className="section-subtitle"

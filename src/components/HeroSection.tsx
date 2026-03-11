@@ -17,12 +17,12 @@ const HeroSection: React.FC = () => {
 
     const words = headingRef.current.innerText.split(' ');
     headingRef.current.innerHTML = '';
-    
+
     // Create spans for each word
     words.forEach((word, i) => {
       const wordSpan = document.createElement('span');
       wordSpan.className = 'inline-block';
-      
+
       // Split into letters
       Array.from(word).forEach((letter) => {
         const letterSpan = document.createElement('span');
@@ -30,9 +30,9 @@ const HeroSection: React.FC = () => {
         letterSpan.textContent = letter;
         wordSpan.appendChild(letterSpan);
       });
-      
+
       headingRef.current?.appendChild(wordSpan);
-      
+
       // Add space except for last word
       if (i < words.length - 1) {
         const space = document.createElement('span');
@@ -40,7 +40,7 @@ const HeroSection: React.FC = () => {
         headingRef.current?.appendChild(space);
       }
     });
-    
+
     // Animate letters
     const letters = headingRef.current.querySelectorAll('span span');
     gsap.to(letters, {
@@ -50,11 +50,11 @@ const HeroSection: React.FC = () => {
       ease: 'power1.out',
       delay: 0.5
     });
-    
+
     // Parallax effect on scroll
     gsap.fromTo(
-      '.hero-content', 
-      { y: 0 }, 
+      '.hero-content',
+      { y: 0 },
       {
         y: -100,
         ease: 'none',
@@ -66,25 +66,25 @@ const HeroSection: React.FC = () => {
         }
       }
     );
-    
+
     return () => {
       ScrollTrigger.getAll().forEach(trigger => trigger.kill());
     };
   }, []);
 
   return (
-    <section 
+    <section
       ref={sectionRef}
       className="relative min-h-screen flex items-center justify-center overflow-hidden grid-bg"
     >
       {/* Background glow */}
       <div className="absolute inset-0 bg-glow opacity-50"></div>
-      
+
       {/* 3D Canvas */}
       <div className="absolute inset-0 z-0">
         <HeroCanvas />
       </div>
-      
+
       {/* Content */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10 hero-content">
         <div className="max-w-3xl mx-auto text-center">
@@ -98,25 +98,25 @@ const HeroSection: React.FC = () => {
               Future-Ready Digital Solutions
             </span>
           </motion.div>
-          
-          <h1 
+
+          <h1
             ref={headingRef}
             className="text-4xl sm:text-5xl md:text-6xl font-orbitron font-bold mb-6 leading-tight"
           >
             Transforming Ideas Into Digital Reality
           </h1>
-          
-          <motion.p 
+
+          <motion.p
             className="text-xl text-neutral-300 mb-8 max-w-2xl mx-auto"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, delay: 0.6 }}
           >
-            We craft cutting-edge web and mobile experiences that drive innovation 
+            We craft cutting-edge web and mobile experiences that drive innovation
             and deliver exceptional results for forward-thinking businesses.
           </motion.p>
-          
-          <motion.div 
+
+          <motion.div
             className="flex flex-col sm:flex-row justify-center gap-4"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -130,9 +130,9 @@ const HeroSection: React.FC = () => {
             </Link> */}
           </motion.div>
         </div>
-        
+
         {/* Scroll indicator */}
-        <motion.div 
+        <motion.div
           className="absolute bottom-10 left-1/2 transform -translate-x-1/2"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -140,14 +140,14 @@ const HeroSection: React.FC = () => {
         >
           <div className="flex flex-col items-center">
             <div className="w-0.5 h-10 bg-primary/50 relative overflow-hidden">
-              <motion.div 
+              <motion.div
                 className="absolute top-0 left-0 w-full h-full bg-primary"
-                animate={{ 
-                  y: ['-100%', '100%'], 
+                animate={{
+                  y: ['-100%', '100%'],
                 }}
-                transition={{ 
-                  repeat: Infinity, 
-                  duration: 1.5, 
+                transition={{
+                  repeat: Infinity,
+                  duration: 1.5,
                   ease: 'linear'
                 }}
               />

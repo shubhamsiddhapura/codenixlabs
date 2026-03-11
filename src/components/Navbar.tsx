@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
-import logo from "../Asset/codenix.svg"
 
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -45,20 +44,21 @@ const Navbar: React.FC = () => {
 
   return (
     <nav
+      aria-label="Main Navigation"
       className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${scrolled ? 'py-3 bg-neutral-900/90 backdrop-blur-lg' : 'py-5 bg-transparent'
         }`}
     >
       <div className="container px-4 mx-auto sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2 hover-effect">
+          <Link to="/" aria-label="Codenix Labs Home" className="flex items-center space-x-2 hover-effect">
             <motion.div
               whileHover={{ rotate: 0 }}
               transition={{ duration: 0.5 }}
               className="text-primary"
             >
               <span className="text-2xl font-bold text-white font-orbitron">
-                CODENIX<span className="text-primary pl-2 ms-0.5">LABS</span>
+                CODENIX<span className="text-primary pl-2 ms-0.5" aria-hidden="true">LABS</span>
               </span>
             </motion.div>
           </Link>
@@ -69,6 +69,7 @@ const Navbar: React.FC = () => {
               <Link
                 key={item.name}
                 to={item.path}
+                aria-label={item.name}
                 className={`relative hover-effect font-medium transition-colors hover:text-primary ${location.pathname === item.path ? 'text-primary' : 'text-white'
                   }`}
               >
@@ -91,6 +92,8 @@ const Navbar: React.FC = () => {
           <div className="md:hidden">
             <button
               onClick={() => setIsOpen(!isOpen)}
+              aria-label={isOpen ? "Close menu" : "Open menu"}
+              aria-expanded={isOpen}
               className="text-white transition-colors hover:text-primary hover-effect"
             >
               {isOpen ? <X size={24} /> : <Menu size={24} />}
