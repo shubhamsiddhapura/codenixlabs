@@ -59,6 +59,8 @@ export const getAllBlogs = async (req, res) => {
         const skip = (page - 1) * limit;
 
         const { category, author, tags, search } = req.query;
+        
+        console.log('📝 [getAllBlogs] Request:', { page, limit, category, author, tags, search });
 
         // Build filter object
         let filter = {};
@@ -90,6 +92,8 @@ export const getAllBlogs = async (req, res) => {
 
         const total = await Blog.countDocuments(filter);
         const totalPages = Math.ceil(total / limit);
+        
+        console.log('✅ [getAllBlogs] Found:', blogs.length, 'Total:', total);
 
         res.status(200).json({
             success: true,
@@ -104,6 +108,7 @@ export const getAllBlogs = async (req, res) => {
         });
 
     } catch (error) {
+        console.error('❌ [getAllBlogs] ERROR:', error.message);
         res.status(500).json({
             success: false,
             message: 'Error fetching blogs',
@@ -144,22 +149,33 @@ export const getBlogById = async (req, res) => {
 export const getBlogBySlug = async (req, res) => {
     try {
         const { slug } = req.params;
+        
+        console.log('📖 [getBlogBySlug] Fetching blog with slug:', slug);
 
         const blog = await Blog.findOne({ slug });
+        
+        console.log('📖 [getBlogBySlug] Blog found:', !!blog);
+        if (blog) {
+            console.log('📖 [getBlogBySlug] Blog Title:', blog.title);
+            console.log('📖 [getBlogBySlug] Published:', blog.isPublished);
+        }
 
         if (!blog) {
+            console.warn('⚠️ [getBlogBySlug] Blog not found for slug:', slug);
             return res.status(404).json({
                 success: false,
                 message: 'Blog not found'
             });
         }
 
+        console.log('✅ [getBlogBySlug] Returning blog data');
         res.status(200).json({
             success: true,
             data: blog
         });
 
     } catch (error) {
+        console.error('❌ [getBlogBySlug] ERROR:', error.message);
         res.status(500).json({
             success: false,
             message: 'Error fetching blog',
@@ -547,10 +563,23 @@ const escapeHtml = (text) => {
 export const getBlogOG = async (req, res) => {
     try {
         const { slug } = req.params;
+        
+        console.log('🔍 [getBlogOG] START - Slug:', slug);
+        console.log('🔍 [getBlogOG] User-Agent:', req.headers['user-agent']);
+        console.log('🔍 [getBlogOG] Request URL:', req.originalUrl);
 
         const blog = await Blog.findOne({ slug, isPublished: true });
+        
+        console.log('🔍 [getBlogOG] Blog found:', !!blog);
+        if (blog) {
+            console.log('🔍 [getBlogOG] Blog ID:', blog._id);
+            console.log('🔍 [getBlogOG] Blog Title:', blog.title);
+            console.log('🔍 [getBlogOG] Featured Image:', blog.featuredImage);
+            console.log('🔍 [getBlogOG] Published:', blog.isPublished);
+        }
 
         if (!blog) {
+            console.warn('⚠️ [getBlogOG] Blog not found or not published, returning 404');
             res.status(404);
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             return res.send(`
@@ -572,9 +601,17 @@ export const getBlogOG = async (req, res) => {
         const title = escapeHtml(blog.SEO?.metaTitle || blog.title || 'CodeNix Labs Blog');
         const description = escapeHtml(blog.SEO?.metaDescription || blog.excerpt || 'Discover innovative web development solutions');
         // Use featured image or fallback to dynamic OG image
-        const image = blog.featuredImage ? escapeHtml(blog.featuredImage) : `https://api.codenixlabs.com/api/og/blog/${escapeHtml(slug)}`;
+        const image = blog.featuredImage ? escapeHtml(blog.featuredImage) : `https://codenix-labs-server.onrender.com/api/og/blog/${escapeHtml(slug)}`;
         const url = `https://www.codenixlabs.com/blog/${escapeHtml(blog.slug)}`;
         const authorName = escapeHtml(blog.author?.name || 'CodeNix Labs');
+
+        console.log('✅ [getBlogOG] OG Data:', { 
+            title, 
+            description, 
+            image, 
+            url, 
+            authorName 
+        });
 
         // Build complete HTML response with OG/Twitter tags
         const htmlContent = `<!DOCTYPE html>
@@ -627,10 +664,13 @@ export const getBlogOG = async (req, res) => {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
         res.setHeader('ETag', `"${blog._id}"`);
+        
+        console.log('✅ [getBlogOG] SUCCESS - Sending HTML response with OG tags');
         res.status(200).send(htmlContent);
 
     } catch (error) {
-        console.error('Error in getBlogOG:', error);
+        console.error('❌ [getBlogOG] ERROR:', error.message);
+        console.error('❌ [getBlogOG] Stack:', error.stack);
         res.status(500);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(`
@@ -643,16 +683,6 @@ export const getBlogOG = async (req, res) => {
             </head>
             <body>
                 <h1>Error generating preview</h1>
-            </body>
-            </html>
-        `);
-    }
-};
-                <title>Server Error</title>
-            </head>
-            <body>
-                <h1>Server Error</h1>
-                <p>Error: ${escapeHtml(error.message)}</p>
             </body>
             </html>
         `);
