@@ -548,7 +548,7 @@ export const getBlogOG = async (req, res) => {
     try {
         const { slug } = req.params;
 
-        const blog = await Blog.findOne({ slug });
+        const blog = await Blog.findOne({ slug, isPublished: true });
 
         if (!blog) {
             res.status(404);
@@ -568,10 +568,11 @@ export const getBlogOG = async (req, res) => {
             `);
         }
 
-        // Extract OG data with fallbacks
-        const title = escapeHtml(blog.SEO?.metaTitle || blog.title);
-        const description = escapeHtml(blog.SEO?.metaDescription || blog.excerpt);
-        const image = escapeHtml(blog.featuredImage || '');
+        // Extract OG data with proper fallbacks
+        const title = escapeHtml(blog.SEO?.metaTitle || blog.title || 'CodeNix Labs Blog');
+        const description = escapeHtml(blog.SEO?.metaDescription || blog.excerpt || 'Discover innovative web development solutions');
+        // Use featured image or fallback to dynamic OG image
+        const image = blog.featuredImage ? escapeHtml(blog.featuredImage) : `https://api.codenixlabs.com/api/og/blog/${escapeHtml(slug)}`;
         const url = `https://www.codenixlabs.com/blog/${escapeHtml(blog.slug)}`;
         const authorName = escapeHtml(blog.author?.name || 'CodeNix Labs');
 
@@ -583,8 +584,9 @@ export const getBlogOG = async (req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="refresh" content="0; url=${escapeHtml(url)}" />
     
-    <title>${title}</title>
+    <title>${title} | CodeNix Labs</title>
     <meta name="description" content="${description}" />
+    <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${url}" />
     
     <!-- Open Graph Meta Tags -->
@@ -595,6 +597,7 @@ export const getBlogOG = async (req, res) => {
     <meta property="og:image" content="${image}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:url" content="${url}" />
     
     <!-- Twitter Card Meta Tags -->
@@ -602,11 +605,17 @@ export const getBlogOG = async (req, res) => {
     <meta name="twitter:title" content="${title}" />
     <meta name="twitter:description" content="${description}" />
     <meta name="twitter:image" content="${image}" />
+    <meta name="twitter:site" content="@codenixlabs" />
     
     <!-- Article Meta Tags -->
     <meta property="article:published_time" content="${blog.publishedAt || blog.createdAt}" />
+    <meta property="article:modified_time" content="${blog.updatedAt || blog.createdAt}" />
     <meta property="article:author" content="${authorName}" />
+    <meta property="article:section" content="${escapeHtml(blog.category || 'Technology')}" />
     ${(blog.tags || []).map(tag => `<meta property="article:tag" content="${escapeHtml(tag)}" />`).join('\n    ')}
+    
+    <!-- Additional SEO Tags -->
+    <meta name="keywords" content="${escapeHtml((blog.tags || []).join(', '))}" />
 </head>
 <body>
     <h1>${title}</h1>
@@ -614,12 +623,14 @@ export const getBlogOG = async (req, res) => {
 </body>
 </html>`;
 
-        // Set response headers
+        // Set response headers for caching
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=300');
+        res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+        res.setHeader('ETag', `"${blog._id}"`);
         res.status(200).send(htmlContent);
 
     } catch (error) {
+        console.error('Error in getBlogOG:', error);
         res.status(500);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(`
@@ -628,6 +639,15 @@ export const getBlogOG = async (req, res) => {
             <head>
                 <meta charset="UTF-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Error</title>
+            </head>
+            <body>
+                <h1>Error generating preview</h1>
+            </body>
+            </html>
+        `);
+    }
+};
                 <title>Server Error</title>
             </head>
             <body>

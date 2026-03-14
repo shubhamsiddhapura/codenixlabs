@@ -2,12 +2,12 @@
   "rewrites": [
     {
       "source": "/blog/:slug",
-      "destination": "$VITE_API_BASE_URL}/api/blogs/og/:slug",
+      "destination": "https://api.codenixlabs.com/api/blogs/og/:slug",
       "has": [
         {
           "type": "header",
           "key": "user-agent",
-          "value": "(linkedinbot|twitterbot|facebookexternalhit|whatsapp|telegrambot|slackbot|discordbot)"
+          "value": "(linkedinbot|twitterbot|facebookexternalhit|whatsapp|telegrambot|slackbot|discordbot|twitterbot|whatsapp)"
         }
       ]
     },
