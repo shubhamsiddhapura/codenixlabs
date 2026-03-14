@@ -16,12 +16,23 @@ app.get('/health', (req, res) => res.status(200).send('OK'));
 
 const allowedOrigins = [
     "https://www.codenixlabs.com",
+    // "http://localhost:3000",
     // "http://localhost:4000",
+    // "http://localhost:5173",
+    // "localhost:3000",
+    // "localhost:4000",
+    // "localhost:5173"
 ];
 
 app.use(cors({
     origin: function (origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) {
+            return callback(null, true);
+        }
+        
+        // Check if origin is in allowed list or is localhost in development
+        if (allowedOrigins.includes(origin) || /localhost/.test(origin) || process.env.NODE_ENV === 'development') {
             callback(null, true);
         } else {
             callback(new Error("Not allowed by CORS"));
@@ -56,7 +67,8 @@ app.use(async (req, res, next) => {
             return next();
         }
 
-        const ogImage = `https://api.codenixlabs.com/api/og/blog/${slug}`;
+        const ogImageUrl = process.env.OG_IMAGE_API_URL || 'http://localhost:4000';
+        const ogImage = `${ogImageUrl}/api/og/blog/${slug}`;
         const title = post.seo?.metaTitle || post.title || 'CodeNix Labs Blog';
         const description = post.seo?.metaDescription || post.excerpt || '';
         const url = `https://codenixlabs.com/blog/${slug}`;
