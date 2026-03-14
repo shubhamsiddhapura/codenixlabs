@@ -65,7 +65,8 @@ const BlogPost: React.FC = () => {
   const blogUrl = post?.slug ? getBlogUrl(post.slug) : shareUrl;
   const metaDescription = post?.seo?.metaDescription || post?.excerpt || '';
   const ogTitle = post?.seo?.metaTitle || post?.title || '';
-  const ogImage = post?.featuredImage || '';
+  // Use dynamic OG image from backend
+  const ogImage = post?.slug ? `https://api.codenixlabs.com/api/og/blog/${post.slug}` : (post?.featuredImage || '');
 
   const shareLinks = {
     facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
