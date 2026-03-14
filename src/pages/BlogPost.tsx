@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
 import { 
   Calendar, 
   Clock, 
-  User, 
   Share2, 
   Facebook, 
   Twitter, 
@@ -56,6 +56,18 @@ const BlogPost: React.FC = () => {
   const shareUrl = window.location.href;
   const shareTitle = post?.title || '';
 
+  // Calculate proper blog URL for OG tags
+  const getBlogUrl = (postSlug: string): string => {
+    const baseUrl = 'https://codenixlabs.com';
+    return `${baseUrl}/blog/${postSlug}`;
+  };
+
+  const blogUrl = post?.slug ? getBlogUrl(post.slug) : shareUrl;
+  const metaDescription = post?.seo?.metaDescription || post?.excerpt || '';
+  const ogTitle = post?.seo?.metaTitle || post?.title || '';
+  // Use dynamic OG image from backend
+  const ogImage = post?.slug ? `https://api.codenixlabs.com/api/og/blog/${post.slug}` : (post?.featuredImage || '');
+
   const shareLinks = {
     facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
     twitter: `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareTitle)}`,
@@ -84,13 +96,44 @@ const BlogPost: React.FC = () => {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.5 }}
-    >
-      {/* Hero Section */}
+    <>
+      {/* Meta Tags */}
+      <Helmet>
+        <title>{ogTitle} | CodeNix Labs Blog</title>
+        <meta name="description" content={metaDescription} />
+        
+        {/* Open Graph Meta Tags */}
+        <meta property="og:title" content={ogTitle} />
+        <meta property="og:description" content={metaDescription} />
+        <meta property="og:image" content={ogImage} />
+        <meta property="og:url" content={blogUrl} />
+        <meta property="og:type" content="article" />
+        <meta property="og:site_name" content="CodeNix Labs" />
+        
+        {/* Twitter Card Meta Tags */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={ogTitle} />
+        <meta name="twitter:description" content={metaDescription} />
+        <meta name="twitter:image" content={ogImage} />
+        
+        {/* Article Meta Tags */}
+        <meta property="article:published_time" content={post?.publishedAt} />
+        <meta property="article:author" content={post?.author?.name} />
+        {post?.tags?.map((tag, index) => (
+          <meta key={`tag-${index}`} property="article:tag" content={tag} />
+        ))}
+        
+        {/* Canonical URL */}
+        <link rel="canonical" href={blogUrl} />
+      </Helmet>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        {/* Hero Section */}
       <section className="pt-32 pb-16 relative">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           {/* Back Button */}
@@ -286,6 +329,7 @@ const BlogPost: React.FC = () => {
         </section>
       )}
     </motion.div>
+    </>
   );
 };
 
