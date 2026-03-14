@@ -532,3 +532,109 @@ export const getBlogStats = async (req, res) => {
         });
     }
 };
+
+// Helper function to escape HTML entities for XSS prevention
+const escapeHtml = (text) => {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+};
+
+// Get Open Graph data as HTML page for social crawlers
+export const getBlogOG = async (req, res) => {
+    try {
+        const { slug } = req.params;
+
+        const blog = await Blog.findOne({ slug });
+
+        if (!blog) {
+            res.status(404);
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            return res.send(`
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8" />
+                    <meta name="viewport" content="width=device-width, initial-scale=1" />
+                    <title>Post Not Found</title>
+                </head>
+                <body>
+                    <h1>Post Not Found</h1>
+                </body>
+                </html>
+            `);
+        }
+
+        // Extract OG data with fallbacks
+        const title = escapeHtml(blog.SEO?.metaTitle || blog.title);
+        const description = escapeHtml(blog.SEO?.metaDescription || blog.excerpt);
+        const image = escapeHtml(blog.featuredImage || '');
+        const url = `https://www.codenixlabs.com/blog/${escapeHtml(blog.slug)}`;
+        const authorName = escapeHtml(blog.author?.name || 'CodeNix Labs');
+
+        // Build complete HTML response with OG/Twitter tags
+        const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content="0; url=${escapeHtml(url)}" />
+    
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${url}" />
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="CodeNix Labs" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:image" content="${image}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="${url}" />
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${title}" />
+    <meta name="twitter:description" content="${description}" />
+    <meta name="twitter:image" content="${image}" />
+    
+    <!-- Article Meta Tags -->
+    <meta property="article:published_time" content="${blog.publishedAt || blog.createdAt}" />
+    <meta property="article:author" content="${authorName}" />
+    ${(blog.tags || []).map(tag => `<meta property="article:tag" content="${escapeHtml(tag)}" />`).join('\n    ')}
+</head>
+<body>
+    <h1>${title}</h1>
+    <p>${description}</p>
+</body>
+</html>`;
+
+        // Set response headers
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        res.status(200).send(htmlContent);
+
+    } catch (error) {
+        res.status(500);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Server Error</title>
+            </head>
+            <body>
+                <h1>Server Error</h1>
+                <p>Error: ${escapeHtml(error.message)}</p>
+            </body>
+            </html>
+        `);
+    }
+};

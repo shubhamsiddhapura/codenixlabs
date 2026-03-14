@@ -12,11 +12,19 @@ connectDB();
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
+const allowedOrigins = [
+    "https://www.codenixlabs.com",
+];
+
 app.use(cors({
-    origin: "https://www.codenixlabs.com",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"]
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error("Not allowed by CORS"));
+        }
+    },
+    credentials: true
 }));
 
 app.use(express.json());
