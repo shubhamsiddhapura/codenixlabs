@@ -1,11 +1,11 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { motion } from "framer-motion"
 import { Search } from "lucide-react"
 import { BlogService } from "../services/blogService"
-import type { BlogPost, BlogCategory } from "../types/blog"
+import type { BlogPost, BlogCategory, Pagination } from "../types/blog"
 import BlogCard from "../components/BlogCard"
 
 const Blog: React.FC = () => {
@@ -15,16 +15,11 @@ const Blog: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [currentPage, setCurrentPage] = useState(1)
-  const [pagination, setPagination] = useState<any>(null)
+  const [pagination, setPagination] = useState<Pagination | null>(null)
 
   const postsPerPage = 6
 
-  useEffect(() => {
-    loadPosts()
-    loadCategories()
-  }, [selectedCategory, currentPage])
-
-  const loadPosts = async () => {
+  const loadPosts = useCallback(async () => {
     setLoading(true)
     try {
       const result = await BlogService.getAllPosts({
@@ -41,16 +36,21 @@ const Blog: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedCategory, searchTerm, currentPage, postsPerPage])
 
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     try {
       const fetchedCategories = await BlogService.getAllCategories()
       setCategories(fetchedCategories)
     } catch (error) {
       console.error("Error loading categories:", error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadPosts()
+    loadCategories()
+  }, [loadPosts, loadCategories])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()

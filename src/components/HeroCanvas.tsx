@@ -1,8 +1,7 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Sphere, MeshDistortMaterial } from '@react-three/drei';
-import { Vector3 } from 'three';
-import { useMotionValue, useSpring, motion } from 'framer-motion';
+import { useMotionValue, useSpring } from 'framer-motion';
 
 const AnimatedSphere = () => {
   const mesh = useRef<THREE.Mesh>(null!);

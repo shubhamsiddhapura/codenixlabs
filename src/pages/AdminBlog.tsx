@@ -1,11 +1,11 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { motion } from "framer-motion"
 import { Plus, Edit, Trash2, Eye, Search, Save, X, AlertCircle } from "lucide-react"
 import { BlogService } from "../services/blogService"
-import type { BlogPost, BlogCategory } from "../types/blog"
+import type { BlogPost, BlogCategory, Pagination } from "../types/blog"
 
 const AdminBlog: React.FC = () => {
   const [posts, setPosts] = useState<BlogPost[]>([])
@@ -18,7 +18,7 @@ const AdminBlog: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const [pagination, setPagination] = useState<any>(null)
+  const [pagination, setPagination] = useState<Pagination | null>(null)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -42,12 +42,7 @@ const AdminBlog: React.FC = () => {
     },
   })
 
-  useEffect(() => {
-    loadPosts()
-    loadCategories()
-  }, [selectedCategory, searchTerm, currentPage])
-
-  const loadPosts = async () => {
+  const loadPosts = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -66,16 +61,21 @@ const AdminBlog: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedCategory, searchTerm, currentPage])
 
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     try {
       const fetchedCategories = await BlogService.getAllCategories()
       setCategories(fetchedCategories)
     } catch (error) {
       console.error("Error loading categories:", error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadPosts()
+    loadCategories()
+  }, [loadPosts, loadCategories])
 
   const handleCreatePost = () => {
     setEditingPost(null)
@@ -193,9 +193,10 @@ const AdminBlog: React.FC = () => {
       setShowEditor(false)
       setCurrentPage(1) // Reset to first page after creating/updating
       loadPosts()
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error saving post:", error)
-      setError(error.message || (editingPost ? "Failed to update post" : "Failed to create post"))
+      const errorMessage = error instanceof Error ? error.message : (editingPost ? "Failed to update post" : "Failed to create post")
+      setError(errorMessage)
     } finally {
       setSaving(false)
     }
