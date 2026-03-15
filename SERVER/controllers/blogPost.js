@@ -59,8 +59,6 @@ export const getAllBlogs = async (req, res) => {
         const skip = (page - 1) * limit;
 
         const { category, author, tags, search } = req.query;
-        
-        console.log('📝 [getAllBlogs] Request:', { page, limit, category, author, tags, search });
 
         // Build filter object
         let filter = {};
@@ -92,8 +90,6 @@ export const getAllBlogs = async (req, res) => {
 
         const total = await Blog.countDocuments(filter);
         const totalPages = Math.ceil(total / limit);
-        
-        console.log('✅ [getAllBlogs] Found:', blogs.length, 'Total:', total);
 
         res.status(200).json({
             success: true,
@@ -108,7 +104,6 @@ export const getAllBlogs = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ [getAllBlogs] ERROR:', error.message);
         res.status(500).json({
             success: false,
             message: 'Error fetching blogs',
@@ -149,33 +144,22 @@ export const getBlogById = async (req, res) => {
 export const getBlogBySlug = async (req, res) => {
     try {
         const { slug } = req.params;
-        
-        console.log('📖 [getBlogBySlug] Fetching blog with slug:', slug);
 
         const blog = await Blog.findOne({ slug });
-        
-        console.log('📖 [getBlogBySlug] Blog found:', !!blog);
-        if (blog) {
-            console.log('📖 [getBlogBySlug] Blog Title:', blog.title);
-            console.log('📖 [getBlogBySlug] Published:', blog.isPublished);
-        }
 
         if (!blog) {
-            console.warn('⚠️ [getBlogBySlug] Blog not found for slug:', slug);
             return res.status(404).json({
                 success: false,
                 message: 'Blog not found'
             });
         }
 
-        console.log('✅ [getBlogBySlug] Returning blog data');
         res.status(200).json({
             success: true,
             data: blog
         });
 
     } catch (error) {
-        console.error('❌ [getBlogBySlug] ERROR:', error.message);
         res.status(500).json({
             success: false,
             message: 'Error fetching blog',
@@ -563,23 +547,11 @@ const escapeHtml = (text) => {
 export const getBlogOG = async (req, res) => {
     try {
         const { slug } = req.params;
-        
-        console.log('🔍 [getBlogOG] START - Slug:', slug);
-        console.log('🔍 [getBlogOG] User-Agent:', req.headers['user-agent']);
-        console.log('🔍 [getBlogOG] Request URL:', req.originalUrl);
 
         // Don't check isPublished - all existing blogs should show OG tags
         const blog = await Blog.findOne({ slug });
-        
-        console.log('🔍 [getBlogOG] Blog found:', !!blog);
-        if (blog) {
-            console.log('🔍 [getBlogOG] Blog ID:', blog._id);
-            console.log('🔍 [getBlogOG] Blog Title:', blog.title);
-            console.log('🔍 [getBlogOG] Featured Image:', blog.featuredImage);
-        }
 
         if (!blog) {
-            console.warn('⚠️ [getBlogOG] Blog not found for slug:', slug);
             res.status(404);
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             return res.send(`
@@ -604,14 +576,6 @@ export const getBlogOG = async (req, res) => {
         const image = blog.featuredImage ? escapeHtml(blog.featuredImage) : `https://codenix-labs-server.onrender.com/api/og/blog/${escapeHtml(slug)}`;
         const url = `https://www.codenixlabs.com/blog/${escapeHtml(blog.slug)}`;
         const authorName = escapeHtml(blog.author?.name || 'CodeNix Labs');
-
-        console.log('✅ [getBlogOG] OG Data:', { 
-            title, 
-            description, 
-            image, 
-            url, 
-            authorName 
-        });
 
         // Build complete HTML response with OG/Twitter tags
         const htmlContent = `<!DOCTYPE html>
@@ -664,13 +628,10 @@ export const getBlogOG = async (req, res) => {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
         res.setHeader('ETag', `"${blog._id}"`);
-        
-        console.log('✅ [getBlogOG] SUCCESS - Sending HTML response with OG tags');
         res.status(200).send(htmlContent);
 
     } catch (error) {
-        console.error('❌ [getBlogOG] ERROR:', error.message);
-        console.error('❌ [getBlogOG] Stack:', error.stack);
+        console.error('Error generating OG tags:', error.message);
         res.status(500);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(`

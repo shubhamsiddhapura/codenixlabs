@@ -7,7 +7,7 @@ export const generateBlogOGImage = async (req, res) => {
     const { slug } = req.params;
     
     // Fetch blog post
-    const post = await Blog.findOne({ slug, isPublished: true });
+    const post = await Blog.findOne({ slug });
     
     if (!post) {
       return res.status(404).json({ error: 'Blog post not found' });

@@ -43,39 +43,12 @@ app.use(cors({
 
 app.use(express.json());
 
-// COMPREHENSIVE LOGGING MIDDLEWARE
+// Minimal production logging
 app.use((req, res, next) => {
-    const timestamp = new Date().toISOString();
-    const method = req.method;
-    const path = req.path;
-    const userAgent = req.headers['user-agent'] || 'Unknown';
-    const origin = req.headers['origin'] || 'Unknown';
-    const referer = req.headers['referer'] || 'Unknown';
-    
-    console.log(`\n📥 [${timestamp}] ${method} ${path}`);
-    console.log(`   Origin: ${origin}`);
-    console.log(`   Referer: ${referer}`);
-    console.log(`   User-Agent: ${userAgent}`);
-    
-    // Check if crawler
-    const isCrawler = /bot|crawler|linkedin|twitter|facebook|twitterbot|whatsapp|pinterest|reddit|tumblr/i.test(userAgent);
-    if (isCrawler) {
-        console.log(`   ⚠️  CRAWLER DETECTED: ${userAgent}`);
-        console.log(`   🎯 [IMPORTANT] Crawler accessing: ${path}`);
+    if (req.path.includes('/api/blogs/og')) {
+        console.log(`[OG] ${req.path}`);
     }
-    
-    // Log response
-    const originalSend = res.send;
-    res.send = function(data) {
-        console.log(`📤 [${method} ${path}] Status: ${res.statusCode}`);
-        if (isCrawler && path.includes('/api/blogs/og')) {
-            console.log(`   ✅ OG endpoint returning data to crawler`);
-        }
-        return originalSend.call(this, data);
-    };
-    
-    next();
-});
+    next();\n});
 
 // Note: Crawler detection handled at Vercel edge level via vercel.json rewrites
 // This backend only needs to serve the OG endpoint for crawlers that access it directly
@@ -103,20 +76,5 @@ function escapeHtml(text) {
 }
 
 app.listen(PORT, () => {
-    console.log('\n========================================');
-    console.log('🚀 [SERVER] Started Successfully');
-    console.log(`🚀 [SERVER] Listening on PORT: ${PORT}`);
-    console.log(`🚀 [SERVER] Environment: ${process.env.NODE_ENV || 'production'}`);
-    console.log(`🚀 [SERVER] Frontend URL: https://www.codenixlabs.com`);
-    console.log(`🚀 [SERVER] API Base: https://codenix-labs-server.onrender.com`);
-    console.log('========================================\n');
-    
-    // Log available routes
-    console.log('📍 [ROUTES] Available Endpoints:');
-    console.log('   GET  /health - Health check');
-    console.log('   GET  /api/blogs - Get all blogs');
-    console.log('   GET  /api/blogs/og/:slug - Get OG meta tags for crawler');
-    console.log('   GET  /api/blogs/slug/:slug - Get blog by slug');
-    console.log('   POST /api/blogs - Create blog');
-    console.log('======================================\n');
+    console.log(`Server running on port ${PORT}`);
 });
