@@ -568,18 +568,18 @@ export const getBlogOG = async (req, res) => {
         console.log('🔍 [getBlogOG] User-Agent:', req.headers['user-agent']);
         console.log('🔍 [getBlogOG] Request URL:', req.originalUrl);
 
-        const blog = await Blog.findOne({ slug, isPublished: true });
+        // Don't check isPublished - all existing blogs should show OG tags
+        const blog = await Blog.findOne({ slug });
         
         console.log('🔍 [getBlogOG] Blog found:', !!blog);
         if (blog) {
             console.log('🔍 [getBlogOG] Blog ID:', blog._id);
             console.log('🔍 [getBlogOG] Blog Title:', blog.title);
             console.log('🔍 [getBlogOG] Featured Image:', blog.featuredImage);
-            console.log('🔍 [getBlogOG] Published:', blog.isPublished);
         }
 
         if (!blog) {
-            console.warn('⚠️ [getBlogOG] Blog not found or not published, returning 404');
+            console.warn('⚠️ [getBlogOG] Blog not found for slug:', slug);
             res.status(404);
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             return res.send(`
