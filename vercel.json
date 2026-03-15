@@ -1,5 +1,19 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+    {
+      "source": "/blog/:slug",
+      "destination": "https://codenix-labs-server.onrender.com/api/blogs/og/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "linkedinbot|twitterbot|facebookexternalhit|Slurp|bingbot|Googlebot|bots"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/"
+    }
   ]
 }

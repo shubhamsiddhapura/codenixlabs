@@ -4,6 +4,7 @@ import {
     getAllBlogs,
     getBlogById,
     getBlogBySlug,
+    getBlogOG,
     updateBlog,
     deleteBlog,
     getBlogsByCategory,
@@ -33,6 +34,9 @@ router.get('/stats/analytics', getBlogStats);    // GET /api/blogs/stats/analyti
 // Utility routes for categories and tags
 router.get('/meta/categories', getCategories);   // GET /api/blogs/meta/categories
 router.get('/meta/tags', getTags);               // GET /api/blogs/meta/tags
+
+// OG data for social crawlers (must come before parameterized routes)
+router.get('/og/:slug', getBlogOG);              // GET /api/blogs/og/:slug
 
 // Filtering routes
 router.get('/category/:category', getBlogsByCategory); // GET /api/blogs/category/:category
