@@ -50,21 +50,27 @@ app.use((req, res, next) => {
     const path = req.path;
     const userAgent = req.headers['user-agent'] || 'Unknown';
     const origin = req.headers['origin'] || 'Unknown';
+    const referer = req.headers['referer'] || 'Unknown';
     
     console.log(`\n📥 [${timestamp}] ${method} ${path}`);
     console.log(`   Origin: ${origin}`);
+    console.log(`   Referer: ${referer}`);
     console.log(`   User-Agent: ${userAgent}`);
     
     // Check if crawler
-    const isCrawler = /bot|crawler|linkedin|twitter|facebook|twitterbot|whatsapp/i.test(userAgent);
+    const isCrawler = /bot|crawler|linkedin|twitter|facebook|twitterbot|whatsapp|pinterest|reddit|tumblr/i.test(userAgent);
     if (isCrawler) {
         console.log(`   ⚠️  CRAWLER DETECTED: ${userAgent}`);
+        console.log(`   🎯 [IMPORTANT] Crawler accessing: ${path}`);
     }
     
     // Log response
     const originalSend = res.send;
     res.send = function(data) {
         console.log(`📤 [${method} ${path}] Status: ${res.statusCode}`);
+        if (isCrawler && path.includes('/api/blogs/og')) {
+            console.log(`   ✅ OG endpoint returning data to crawler`);
+        }
         return originalSend.call(this, data);
     };
     
