@@ -48,7 +48,8 @@ app.use((req, res, next) => {
     if (req.path.includes('/api/blogs/og')) {
         console.log(`[OG] ${req.path}`);
     }
-    next();\n});
+    next();
+});
 
 // Note: Crawler detection handled at Vercel edge level via vercel.json rewrites
 // This backend only needs to serve the OG endpoint for crawlers that access it directly
