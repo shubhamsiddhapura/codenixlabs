@@ -10,7 +10,8 @@ import {
   Twitter, 
   Linkedin,
   ArrowLeft,
-  Tag
+  Tag,
+  Send
 } from 'lucide-react';
 import { BlogService } from '../services/blogService';
 import { BlogPost as BlogPostType } from '../types/blog';
@@ -72,7 +73,8 @@ const BlogPost: React.FC = () => {
   const shareLinks = {
     facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
     twitter: `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareTitle)}`,
-    linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`
+    linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`,
+    whatsapp: `https://wa.me/?text=${encodeURIComponent(`${shareTitle} ${shareUrl}`)}`
   };
 
   if (loading) {
@@ -294,6 +296,15 @@ const BlogPost: React.FC = () => {
                     >
                       <Linkedin size={18} />
                       <span>LinkedIn</span>
+                    </a>
+                    <a
+                      href={shareLinks.whatsapp}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 rounded-lg bg-neutral-800 hover:bg-green-500 transition-colors hover-effect"
+                    >
+                      <Send size={18} />
+                      <span>WhatsApp</span>
                     </a>
                   </div>
                 </div>
