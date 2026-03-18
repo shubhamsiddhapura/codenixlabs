@@ -67,8 +67,9 @@ const BlogPost: React.FC = () => {
   const metaDescription = post?.seo?.metaDescription || post?.excerpt || '';
   const ogTitle = post?.seo?.metaTitle || post?.title || '';
   // Use featured image first (like LinkedIn), fallback to dynamic OG image
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
-  const ogImage = post?.featuredImage || (post?.slug ? `${apiBaseUrl}/api/og/blog/${post.slug}` : '');
+  // Always use production API for OG images so WhatsApp crawlers can fetch them
+  const productionApiUrl = 'https://codenix-labs-server.onrender.com';
+  const ogImage = post?.featuredImage || (post?.slug ? `${productionApiUrl}/api/og/blog/${post.slug}` : '');
 
   const shareLinks = {
     facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
