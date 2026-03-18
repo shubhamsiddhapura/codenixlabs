@@ -66,9 +66,9 @@ const BlogPost: React.FC = () => {
   const blogUrl = post?.slug ? getBlogUrl(post.slug) : shareUrl;
   const metaDescription = post?.seo?.metaDescription || post?.excerpt || '';
   const ogTitle = post?.seo?.metaTitle || post?.title || '';
-  // Use dynamic OG image from backend with environment variable
+  // Use featured image first (like LinkedIn), fallback to dynamic OG image
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
-  const ogImage = post?.slug ? `${apiBaseUrl}/api/og/blog/${post.slug}` : (post?.featuredImage || '');
+  const ogImage = post?.featuredImage || (post?.slug ? `${apiBaseUrl}/api/og/blog/${post.slug}` : '');
 
   const shareLinks = {
     facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
