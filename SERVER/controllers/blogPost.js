@@ -655,7 +655,8 @@ export const getHomeOG = async (req, res) => {
     try {
         const title = 'Codenix Labs | Web Development & UI/UX Design Agency';
         const description = 'Expert web development, mobile apps, and UI/UX design. Build scalable, high-performance digital products with Codenix Labs.';
-        const image = 'https://codenix-labs-server.onrender.com/api/og/home';
+        // Use Codenix Labs logo from Cloudinary
+        const image = 'https://res.cloudinary.com/dsptxtmvk/image/upload/v1773859983/Screenshot_2026-03-19_001839_fvtr1w.png';
         const url = 'https://www.codenixlabs.com/';
 
         const htmlContent = `<!DOCTYPE html>
