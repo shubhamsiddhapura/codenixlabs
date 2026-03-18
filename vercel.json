@@ -1,6 +1,17 @@
 {
   "rewrites": [
     {
+      "source": "/",
+      "destination": "https://codenix-labs-server.onrender.com/api/og/home",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "linkedinbot|twitterbot|facebookexternalhit|whatsapp|Slurp|bingbot|Googlebot|bots"
+        }
+      ]
+    },
+    {
       "source": "/blog/:slug",
       "destination": "https://codenix-labs-server.onrender.com/api/blogs/og/:slug",
       "has": [
