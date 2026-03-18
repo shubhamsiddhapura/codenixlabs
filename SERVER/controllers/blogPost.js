@@ -649,3 +649,71 @@ export const getBlogOG = async (req, res) => {
         `);
     }
 };
+
+// Get Home OG Tags (for social media crawlers)
+export const getHomeOG = async (req, res) => {
+    try {
+        const title = 'Codenix Labs | Web Development & UI/UX Design Agency';
+        const description = 'Expert web development, mobile apps, and UI/UX design. Build scalable, high-performance digital products with Codenix Labs.';
+        const image = 'https://codenix-labs-server.onrender.com/api/og/home';
+        const url = 'https://www.codenixlabs.com/';
+
+        const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content="0; url=${escapeHtml(url)}" />
+    
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="${url}" />
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Codenix Labs" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:image" content="${image}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:url" content="${url}" />
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${title}" />
+    <meta name="twitter:description" content="${description}" />
+    <meta name="twitter:image" content="${image}" />
+    <meta name="twitter:site" content="@codenixlabs" />
+</head>
+<body>
+    <h1>${title}</h1>
+    <p>${description}</p>
+</body>
+</html>`;
+
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+        res.status(200).send(htmlContent);
+
+    } catch (error) {
+        console.error('Error generating home OG tags:', error.message);
+        res.status(500);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Error</title>
+            </head>
+            <body>
+                <h1>Error generating preview</h1>
+            </body>
+            </html>
+        `);
+    }
+};
