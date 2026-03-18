@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/",
-      "destination": "https://codenix-labs-server.onrender.com/api/og/home",
+      "destination": "https://codenix-labs-server.onrender.com/api/blogs/og/home",
       "has": [
         {
           "type": "header",
