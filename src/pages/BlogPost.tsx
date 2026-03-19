@@ -66,10 +66,8 @@ const BlogPost: React.FC = () => {
   const blogUrl = post?.slug ? getBlogUrl(post.slug) : shareUrl;
   const metaDescription = post?.seo?.metaDescription || post?.excerpt || '';
   const ogTitle = post?.seo?.metaTitle || post?.title || '';
-  // Use featured image first (like LinkedIn), fallback to dynamic OG image
-  // Always use production API for OG images so WhatsApp crawlers can fetch them
-  const productionApiUrl = 'https://codenix-labs-server.onrender.com';
-  const ogImage = post?.featuredImage || (post?.slug ? `${productionApiUrl}/api/og/blog/${post.slug}` : '');
+  // Use featured image (all blogs have them)
+  const ogImage = post?.featuredImage || '';
 
   const shareLinks = {
     facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
