@@ -7,7 +7,9 @@ const blogSchema = new mongoose.Schema({
     },
     slug: {
         type: String,
-        required: true
+        required: true,
+        index: true,  // INDEX ADDED - fixes OG endpoint timeout!
+        unique: true   // Ensure slugs are unique
     },
     excerpt: {
         type: String,

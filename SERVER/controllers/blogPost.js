@@ -545,13 +545,34 @@ const escapeHtml = (text) => {
 
 // Get Open Graph data as HTML page for social crawlers
 export const getBlogOG = async (req, res) => {
+    const startTime = Date.now();
+    let responseSent = false;
+    
     try {
         const { slug } = req.params;
 
-        // Don't check isPublished - all existing blogs should show OG tags
-        const blog = await Blog.findOne({ slug });
+        // Set timeout to fail fast (crawlers have short timeouts)
+        const queryTimeout = setTimeout(() => {
+            if (!responseSent) {
+                responseSent = true;
+                res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                res.status(504).send(`<html><head><title>Service Unavailable</title></head><body>Request Timeout</body></html>`);
+                console.warn(`[OG] Query timeout for slug: ${slug}`);
+            }
+        }, 5000); // 5 second timeout
+
+        // Query only fields needed for OG tags (lazy load)
+        const blog = await Blog.findOne({ slug }).select('title excerpt featuredImage SEO author category tags publishedAt createdAt updatedAt slug');
+
+        clearTimeout(queryTimeout);
+
+        // If response already sent from timeout, exit early
+        if (responseSent) {
+            return;
+        }
 
         if (!blog) {
+            responseSent = true;
             res.status(404);
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             return res.send(`
@@ -569,13 +590,18 @@ export const getBlogOG = async (req, res) => {
             `);
         }
 
-        // Extract OG data with proper fallbacks
+        // Extract OG data - all blogs should have featured images
         const title = escapeHtml(blog.SEO?.metaTitle || blog.title || 'CodeNix Labs Blog');
         const description = escapeHtml(blog.SEO?.metaDescription || blog.excerpt || 'Discover innovative web development solutions');
-        // Use featured image or fallback to dynamic OG image
-        const image = blog.featuredImage ? escapeHtml(blog.featuredImage) : `https://codenix-labs-server.onrender.com/api/og/blog/${escapeHtml(slug)}`;
+        // Use the featured image directly (all blogs have them)
+        const image = blog.featuredImage ? escapeHtml(blog.featuredImage) : '';
         const url = `https://www.codenixlabs.com/blog/${escapeHtml(blog.slug)}`;
         const authorName = escapeHtml(blog.author?.name || 'CodeNix Labs');
+
+        // Validate required OG fields
+        if (!image) {
+            console.warn(`[OG] Missing featured image for slug: ${slug}`);
+        }
 
         // Build complete HTML response with OG/Twitter tags
         const htmlContent = `<!DOCTYPE html>
@@ -595,17 +621,16 @@ export const getBlogOG = async (req, res) => {
     <meta property="og:site_name" content="CodeNix Labs" />
     <meta property="og:title" content="${title}" />
     <meta property="og:description" content="${description}" />
-    <meta property="og:image" content="${image}" />
+    ${image ? `<meta property="og:image" content="${image}" />
     <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:height" content="630" />` : ''}
     <meta property="og:url" content="${url}" />
     
     <!-- Twitter Card Meta Tags -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${title}" />
     <meta name="twitter:description" content="${description}" />
-    <meta name="twitter:image" content="${image}" />
+    ${image ? `<meta name="twitter:image" content="${image}" />` : ''}
     <meta name="twitter:site" content="@codenixlabs" />
     
     <!-- Article Meta Tags -->
@@ -625,28 +650,37 @@ export const getBlogOG = async (req, res) => {
 </html>`;
 
         // Set response headers for caching
+        responseSent = true;
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
         res.setHeader('ETag', `"${blog._id}"`);
         res.status(200).send(htmlContent);
+        
+        const duration = Date.now() - startTime;
+        console.log(`[OG] ${slug} - ${duration}ms`);
 
     } catch (error) {
-        console.error('Error generating OG tags:', error.message);
-        res.status(500);
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.send(`
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8" />
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <title>Error</title>
-            </head>
-            <body>
-                <h1>Error generating preview</h1>
-            </body>
-            </html>
-        `);
+        console.error(`[OG ERROR] ${error.message}`);
+        
+        // Only send error response if we haven't already sent a response
+        if (!responseSent) {
+            responseSent = true;
+            res.status(500);
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.send(`
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8" />
+                    <meta name="viewport" content="width=device-width, initial-scale=1" />
+                    <title>Error</title>
+                </head>
+                <body>
+                    <h1>Error generating preview</h1>
+                </body>
+                </html>
+            `);
+        }
     }
 };
 
