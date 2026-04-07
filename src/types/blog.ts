@@ -11,14 +11,21 @@ export interface BlogPost {
   category: string;
   tags: string[];
   featuredImage: string;
-  publishedAt: string;
-  readTime: number;
-  isPublished: boolean;
-  seo: {
-    metaTitle: string;
-    metaDescription: string;
-    keywords: string[];
+  publishedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  readTime?: number;
+  status: "draft" | "published";
+  seo?: {
+    metaTitle?: string;
+    metaDescription?: string;
+    keywords?: string[];
   };
+  // SEO?: {
+  //   metaTitle?: string;
+  //   metaDescription?: string;
+  //   keywords?: string[];
+  // };
 }
 
 export interface BlogCategory {
