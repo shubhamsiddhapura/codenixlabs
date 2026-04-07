@@ -1,5 +1,20 @@
 import Blog from '../models/blog.js';
 
+// Helper function to get status filter based on admin parameter
+// - If admin=true query param is present, returns all statuses
+// - Otherwise returns only published blogs for public consumption
+// - Old blogs without status are treated as published (backward compatibility)
+const getStatusFilter = (req) => {
+    const isAdmin = req.query.admin === 'true';
+    if (isAdmin) return {};
+    return { 
+        $or: [
+            { status: "published" },
+            { status: { $exists: false } }
+        ]
+    };
+};
+
 export const createBlog = async (req, res) => {
     try {
         const {
@@ -11,7 +26,8 @@ export const createBlog = async (req, res) => {
             category,
             tags,
             featuredImage,
-            SEO
+            SEO,
+            status = "draft"
         } = req.body;
 
         const existingBlog = await Blog.findOne({ slug });
@@ -31,7 +47,8 @@ export const createBlog = async (req, res) => {
             category,
             tags,
             featuredImage,
-            SEO
+            SEO,
+            status
         });
 
         const savedBlog = await newBlog.save();
@@ -60,8 +77,8 @@ export const getAllBlogs = async (req, res) => {
 
         const { category, author, tags, search } = req.query;
 
-        // Build filter object
-        let filter = {};
+        // Build filter object - Always include status filter
+        let filter = { ...getStatusFilter(req) };
 
         if (category) {
             filter.category = { $regex: category, $options: 'i' };
@@ -145,7 +162,10 @@ export const getBlogBySlug = async (req, res) => {
     try {
         const { slug } = req.params;
 
-        const blog = await Blog.findOne({ slug });
+        // Apply status filter for public users
+        const filter = { slug, ...getStatusFilter(req) };
+
+        const blog = await Blog.findOne(filter);
 
         if (!blog) {
             return res.status(404).json({
@@ -254,16 +274,17 @@ export const getBlogsByCategory = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        const blogs = await Blog.find({
-            category: { $regex: category, $options: 'i' }
-        })
+        const filter = {
+            category: { $regex: category, $options: 'i' },
+            ...getStatusFilter(req)
+        };
+
+        const blogs = await Blog.find(filter)
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit);
 
-        const total = await Blog.countDocuments({
-            category: { $regex: category, $options: 'i' }
-        });
+        const total = await Blog.countDocuments(filter);
 
         const totalPages = Math.ceil(total / limit);
 
@@ -296,16 +317,17 @@ export const getBlogsByAuthor = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        const blogs = await Blog.find({
-            'author.name': { $regex: author, $options: 'i' }
-        })
+        const filter = {
+            'author.name': { $regex: author, $options: 'i' },
+            ...getStatusFilter(req)
+        };
+
+        const blogs = await Blog.find(filter)
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit);
 
-        const total = await Blog.countDocuments({
-            'author.name': { $regex: author, $options: 'i' }
-        });
+        const total = await Blog.countDocuments(filter);
 
         const totalPages = Math.ceil(total / limit);
 
@@ -338,16 +360,17 @@ export const getBlogsByTag = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const skip = (page - 1) * limit;
 
-        const blogs = await Blog.find({
-            tags: { $in: [tag] }
-        })
+        const filter = {
+            tags: { $in: [tag] },
+            ...getStatusFilter(req)
+        };
+
+        const blogs = await Blog.find(filter)
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit);
 
-        const total = await Blog.countDocuments({
-            tags: { $in: [tag] }
-        });
+        const total = await Blog.countDocuments(filter);
 
         const totalPages = Math.ceil(total / limit);
 
@@ -377,10 +400,12 @@ export const getFeaturedBlogs = async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 5;
 
-        const blogs = await Blog.find()
+        const filter = getStatusFilter(req);
+
+        const blogs = await Blog.find(filter)
             .sort({ createdAt: -1 })
             .limit(limit)
-            .select('title slug excerpt author category featuredImage createdAt');
+            .select('title slug excerpt author category featuredImage createdAt status');
 
         res.status(200).json({
             success: true,
@@ -419,7 +444,8 @@ export const searchBlogs = async (req, res) => {
                 { category: { $regex: q, $options: 'i' } },
                 { tags: { $in: [new RegExp(q, 'i')] } },
                 { 'author.name': { $regex: q, $options: 'i' } }
-            ]
+            ],
+            ...getStatusFilter(req)
         };
 
         const blogs = await Blog.find(searchFilter)

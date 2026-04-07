@@ -194,7 +194,7 @@ const BlogPost: React.FC = () => {
               </div>
               <div className="flex items-center gap-1">
                 <Calendar size={16} />
-                <span>{formatDate(post.publishedAt)}</span>
+                <span>{formatDate(post.publishedAt || new Date().toISOString())}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Clock size={16} />

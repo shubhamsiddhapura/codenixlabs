@@ -43,13 +43,14 @@ const transformBlogPost = (backendPost: any): BlogPost => {
     tags: backendPost.tags || [],
     featuredImage: backendPost.featuredImage,
     publishedAt: backendPost.publishedAt || backendPost.createdAt,
+    createdAt: backendPost.createdAt,
+    updatedAt: backendPost.updatedAt,
     readTime: backendPost.readTime || Math.ceil((backendPost.content?.length || 0) / 1000) || 5,
-    isPublished: backendPost.isPublished !== false,
-    seo: backendPost.SEO ||
-      backendPost.seo || {
-      metaTitle: backendPost.title,
-      metaDescription: backendPost.excerpt,
-      keywords: backendPost.tags || [],
+    status: backendPost.status || "published",
+    seo: {
+      metaTitle: backendPost.SEO?.metaTitle || backendPost.seo?.metaTitle || backendPost.title,
+      metaDescription: backendPost.SEO?.metaDescription || backendPost.seo?.metaDescription || backendPost.excerpt,
+      keywords: backendPost.SEO?.keywords || backendPost.seo?.keywords || backendPost.tags || [],
     },
   }
 }
@@ -106,6 +107,8 @@ export class BlogService {
     search?: string
     limit?: number
     page?: number
+    admin?: boolean
+    status?: "draft" | "published" | "all"
   }): Promise<{ posts: BlogPost[]; total: number; pagination: any }> {
     try {
       const params = new URLSearchParams()
@@ -117,6 +120,10 @@ export class BlogService {
       }
       if (filters?.search) {
         params.append("search", filters.search)
+      }
+      // For admin panel, pass admin=true to show all statuses
+      if (filters?.admin === true) {
+        params.append("admin", "true")
       }
 
       const queryString = params.toString()
@@ -277,7 +284,7 @@ export class BlogService {
         category: postData.category,
         tags: postData.tags,
         featuredImage: postData.featuredImage,
-        isPublished: postData.isPublished,
+        status: postData.status || "draft",
         SEO: {
           metaTitle: postData.seo?.metaTitle || postData.title,
           metaDescription: postData.seo?.metaDescription || postData.excerpt,
@@ -313,7 +320,7 @@ export class BlogService {
       if (postData.category) backendData.category = postData.category
       if (postData.tags) backendData.tags = postData.tags
       if (postData.featuredImage) backendData.featuredImage = postData.featuredImage
-      if (postData.isPublished !== undefined) backendData.isPublished = postData.isPublished
+      if (postData.status) backendData.status = postData.status
       if (postData.seo) {
         backendData.SEO = {
           metaTitle: postData.seo.metaTitle,
