@@ -5,6 +5,7 @@ import {
     getBlogById,
     getBlogBySlug,
     getBlogOG,
+    getHomeOG,
     updateBlog,
     deleteBlog,
     getBlogsByCategory,
@@ -15,7 +16,8 @@ import {
     getCategories,
     getTags,
     getBlogStats
-} from '../controllers/blogPost.js'; // Adjust path as needed
+} from '../controllers/blogPost.js';
+import { generateBlog } from '../controllers/blogGenerate.js';
 
 const router = express.Router();
 
@@ -27,6 +29,7 @@ router.put('/:id', updateBlog);                  // PUT /api/blogs/:id
 router.delete('/:id', deleteBlog);               // DELETE /api/blogs/:id
 
 // Special routes (should come before parameterized routes)
+router.post('/generate', generateBlog);          // POST /api/blogs/generate
 router.get('/featured/posts', getFeaturedBlogs); // GET /api/blogs/featured/posts
 router.get('/search/posts', searchBlogs);        // GET /api/blogs/search/posts
 router.get('/stats/analytics', getBlogStats);    // GET /api/blogs/stats/analytics
@@ -36,7 +39,8 @@ router.get('/meta/categories', getCategories);   // GET /api/blogs/meta/categori
 router.get('/meta/tags', getTags);               // GET /api/blogs/meta/tags
 
 // OG data for social crawlers (must come before parameterized routes)
-router.get('/og/:slug', getBlogOG);              // GET /api/blogs/og/:slug
+router.get('/og/home', getHomeOG);              // GET /api/blogs/og/home
+router.get('/og/:slug', getBlogOG);             // GET /api/blogs/og/:slug
 
 // Filtering routes
 router.get('/category/:category', getBlogsByCategory); // GET /api/blogs/category/:category

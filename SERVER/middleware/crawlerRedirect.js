@@ -20,7 +20,7 @@ export const crawlerMetaTagsMiddleware = async (req, res, next) => {
 
   try {
     // Fetch blog post
-    const post = await Blog.findOne({ slug, isPublished: true });
+    const post = await Blog.findOne({ slug });
     
     if (!post) {
       return next();
