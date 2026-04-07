@@ -16,7 +16,8 @@ import {
     getCategories,
     getTags,
     getBlogStats
-} from '../controllers/blogPost.js'; // Adjust path as needed
+} from '../controllers/blogPost.js';
+import { generateBlog } from '../controllers/blogGenerate.js';
 
 const router = express.Router();
 
@@ -28,6 +29,7 @@ router.put('/:id', updateBlog);                  // PUT /api/blogs/:id
 router.delete('/:id', deleteBlog);               // DELETE /api/blogs/:id
 
 // Special routes (should come before parameterized routes)
+router.post('/generate', generateBlog);          // POST /api/blogs/generate
 router.get('/featured/posts', getFeaturedBlogs); // GET /api/blogs/featured/posts
 router.get('/search/posts', searchBlogs);        // GET /api/blogs/search/posts
 router.get('/stats/analytics', getBlogStats);    // GET /api/blogs/stats/analytics

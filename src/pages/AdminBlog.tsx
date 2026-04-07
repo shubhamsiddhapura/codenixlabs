@@ -15,10 +15,20 @@ const AdminBlog: React.FC = () => {
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
+  const [selectedStatus, setSelectedStatus] = useState<"all" | "draft" | "published">("all")
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [pagination, setPagination] = useState<any>(null)
+
+  // AI Generation state
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [generateTopic, setGenerateTopic] = useState("")
+  const [generateCategory, setGenerateCategory] = useState("")
+  const [generating, setGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState<string | null>(null)
+  const [regenerating, setRegenerating] = useState(false)
+  const [showAnglePicker, setShowAnglePicker] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -29,7 +39,7 @@ const AdminBlog: React.FC = () => {
     category: "",
     tags: "",
     featuredImage: "",
-    isPublished: false,
+    status: "draft" as "draft" | "published",
     author: {
       name: "Admin",
       avatar:
@@ -38,14 +48,62 @@ const AdminBlog: React.FC = () => {
     seo: {
       metaTitle: "",
       metaDescription: "",
-      keywords: [],
+      keywords: [] as string[],
     },
   })
+
+   const handleRegenerateBlog = async (angle: string) => {
+  setShowAnglePicker(false)
+  setRegenerating(true)
+  setError(null)
+
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_API_BASE_URL || "http://localhost:4000"}/api/blogs/generate`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: formData.title || generateTopic,  // use current title as topic
+          category: formData.category,
+          angle,
+        }),
+      }
+    )
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.message || "Failed to regenerate blog")
+    }
+
+    const data = await response.json()
+    if (data.success && data.data) {
+      const g = data.data
+      setFormData((prev) => ({
+        ...prev,
+        title: g.title,
+        slug: g.slug,
+        excerpt: g.excerpt,
+        content: g.content,
+        tags: (g.tags || []).join(", "),
+        seo: {
+          metaTitle: g.SEO?.metaTitle || g.title,
+          metaDescription: g.SEO?.metaDescription || g.excerpt,
+          keywords: g.SEO?.keywords || [],
+        },
+      }))
+    }
+  } catch (error: any) {
+    setError(error.message || "Failed to regenerate. Please try again.")
+  } finally {
+    setRegenerating(false)
+  }
+}
 
   useEffect(() => {
     loadPosts()
     loadCategories()
-  }, [selectedCategory, searchTerm, currentPage])
+  }, [selectedCategory, selectedStatus, searchTerm, currentPage])
 
   const loadPosts = async () => {
     setLoading(true)
@@ -56,9 +114,20 @@ const AdminBlog: React.FC = () => {
         search: searchTerm || undefined,
         limit: 10,
         page: currentPage,
+        admin: true, // Admin sees all statuses
       })
 
-      setPosts(result.posts)
+      // Filter by status on frontend if needed
+      let filteredPosts = result.posts
+      if (selectedStatus !== "all") {
+        filteredPosts = result.posts.filter((post) => {
+          // Treat missing status as "published" for backward compatibility
+          const postStatus = post.status || "published"
+          return postStatus === selectedStatus
+        })
+      }
+
+      setPosts(filteredPosts)
       setPagination(result.pagination)
     } catch (error) {
       console.error("Error loading posts:", error)
@@ -87,7 +156,7 @@ const AdminBlog: React.FC = () => {
       category: "",
       tags: "",
       featuredImage: "",
-      isPublished: false,
+      status: "draft",
       author: {
         name: "Admin",
         avatar:
@@ -96,7 +165,7 @@ const AdminBlog: React.FC = () => {
       seo: {
         metaTitle: "",
         metaDescription: "",
-        keywords: [],
+        keywords: [] as string[],
       },
     })
     setShowEditor(true)
@@ -112,7 +181,7 @@ const AdminBlog: React.FC = () => {
       category: post.category,
       tags: Array.isArray(post.tags) ? post.tags.join(", ") : "",
       featuredImage: post.featuredImage || "",
-      isPublished: post.isPublished,
+      status: post.status,
       author: post.author,
       seo: {
         metaTitle: post.seo?.metaTitle || post.title,
@@ -171,7 +240,7 @@ const AdminBlog: React.FC = () => {
           .map((tag) => tag.trim())
           .filter((tag) => tag),
         featuredImage: formData.featuredImage.trim(),
-        isPublished: formData.isPublished,
+        status: formData.status,
         author: formData.author,
         publishedAt: editingPost?.publishedAt || new Date().toISOString(),
         readTime: Math.ceil(formData.content.length / 1000) || 5,
@@ -261,8 +330,83 @@ const AdminBlog: React.FC = () => {
     setCurrentPage(1)
   }
 
+  const handleStatusChange = (status: "all" | "draft" | "published") => {
+    setSelectedStatus(status)
+    setCurrentPage(1)
+  }
+
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
+  }
+
+  const handleGenerateBlog = async () => {
+    if (!generateTopic.trim()) {
+      setGenerateError("Topic is required")
+      return
+    }
+    if (!generateCategory.trim()) {
+      setGenerateError("Category is required")
+      return
+    }
+
+    setGenerating(true)
+    setGenerateError(null)
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL || "http://localhost:4000"}/api/blogs/generate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            topic: generateTopic.trim(),
+            category: generateCategory.trim(),
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Failed to generate blog")
+      }
+
+      const data = await response.json()
+
+      if (data.success && data.data) {
+        const generatedBlog = data.data
+
+        // Auto-fill form with generated data
+        setFormData((prev) => ({
+          ...prev,
+          title: generatedBlog.title,
+          slug: generatedBlog.slug,
+          excerpt: generatedBlog.excerpt,
+          content: generatedBlog.content,
+          category: generatedBlog.category,
+          tags: (generatedBlog.tags || []).join(", "),
+          featuredImage: generatedBlog.featuredImage || "",
+          seo: {
+            metaTitle: generatedBlog.SEO?.metaTitle || generatedBlog.title,
+            metaDescription: generatedBlog.SEO?.metaDescription || generatedBlog.excerpt,
+            keywords: generatedBlog.SEO?.keywords || [],
+          },
+        }))
+
+        // Close generate modal and open editor
+        setShowGenerateModal(false)
+        setGenerateTopic("")
+        setGenerateCategory("")
+        setEditingPost(null) // Ensure we're creating new post
+        setError(null)
+      }
+    } catch (error: any) {
+      console.error("Error generating blog:", error)
+      setGenerateError(error.message || "Failed to generate blog. Please try again.")
+    } finally {
+      setGenerating(false)
+    }
   }
 
   return (
@@ -319,6 +463,17 @@ const AdminBlog: React.FC = () => {
                 className="w-full pl-10 pr-4 py-3 bg-neutral-800/50 border border-neutral-700 focus:border-primary rounded-lg text-white placeholder-neutral-500 transition-all duration-300 focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
+
+            {/* Status Filter */}
+            <select
+              value={selectedStatus}
+              onChange={(e) => handleStatusChange(e.target.value as "all" | "draft" | "published")}
+              className="px-4 py-3 bg-neutral-800/50 border border-neutral-700 focus:border-primary rounded-lg text-white transition-all duration-300 focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">All Status</option>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+            </select>
 
             {/* Category Filter */}
             <select
@@ -403,13 +558,13 @@ const AdminBlog: React.FC = () => {
                             <span className="text-sm">{post.author.name}</span>
                           </div>
                         </td>
-                        <td className="p-4 text-sm text-neutral-400">{formatDate(post.publishedAt)}</td>
+                        <td className="p-4 text-sm text-neutral-400">{formatDate(post.publishedAt || new Date().toISOString())}</td>
                         <td className="p-4">
                           <span
-                            className={`px-2 py-1 rounded text-sm ${post.isPublished ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"
+                            className={`px-2 py-1 rounded text-sm ${(post.status || "published") === "published" ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"
                               }`}
                           >
-                            {post.isPublished ? "Published" : "Draft"}
+                            {(post.status || "published") === "published" ? "Published" : "Draft"}
                           </span>
                         </td>
                         <td className="p-4">
@@ -506,7 +661,18 @@ const AdminBlog: React.FC = () => {
           >
             {/* Editor Header */}
             <div className="flex items-center justify-between p-6 border-b border-neutral-800">
-              <h2 className="text-xl font-orbitron font-bold">{editingPost ? "Edit Post" : "Create New Post"}</h2>
+              <div className="flex items-center gap-4">
+                <h2 className="text-xl font-orbitron font-bold">{editingPost ? "Edit Post" : "Create New Post"}</h2>
+                {!editingPost && (
+                  <button
+                    onClick={() => setShowGenerateModal(true)}
+                    className="btn neon-border hover-effect text-sm py-2 px-3 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 flex items-center gap-2"
+                    disabled={saving}
+                  >
+                    ✨ Generate with AI
+                  </button>
+                )}
+              </div>
               <button
                 onClick={closeEditor}
                 className="p-2 rounded-lg hover:bg-neutral-800 transition-colors hover-effect"
@@ -611,20 +777,69 @@ const AdminBlog: React.FC = () => {
                 />
               </div>
 
-              {/* Content */}
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Content <span className="text-red-400">*</span>
-                </label>
-                <textarea
-                  value={formData.content}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, content: e.target.value }))}
-                  rows={12}
-                  className="w-full px-4 py-3 bg-neutral-800/50 border border-neutral-700 focus:border-primary rounded-lg text-white transition-all duration-300 focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-                  placeholder="Write your post content here (HTML supported)"
-                  disabled={saving}
-                />
-              </div>
+{/* Content — replace lines 781–850 with this */}
+<div className="relative">
+  <div className="flex items-center justify-between mb-2">
+    <label className="block text-sm font-medium">
+      Content <span className="text-red-400">*</span>
+    </label>
+    {formData.content && (
+      <button
+        type="button"
+        onClick={() => setShowAnglePicker((v) => !v)}
+        disabled={regenerating || saving}
+        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+      >
+        {regenerating ? (
+          <div className="animate-spin rounded-full h-3 w-3 border-b border-primary" />
+        ) : (
+          <span>🔄</span>
+        )}
+        {regenerating ? "Regenerating..." : "Regenerate"}
+      </button>
+    )}
+  </div>
+
+  {/* Angle picker dropdown */}
+  {showAnglePicker && (
+    <div className="absolute right-0 top-8 z-20 bg-neutral-900 border border-neutral-700 rounded-xl p-3 w-72 shadow-2xl">
+      <p className="text-xs text-neutral-400 mb-3">Pick a different angle for fresh content:</p>
+      <div className="space-y-1.5">
+        {[
+          { key: "contrarian", label: "🎯 Contrarian Take", desc: "Challenge popular opinions" },
+          { key: "datadriven", label: "📊 Data-Driven", desc: "Stats and research heavy" },
+          { key: "storytelling", label: "📖 Storytelling", desc: "Narrative and case study first" },
+          { key: "beginner", label: "🔰 Beginner's Guide", desc: "Simple, step-by-step" },
+          { key: "futurist", label: "🔥 Bold & Futurist", desc: "Predictions and trend-based" },
+        ].map((a) => (
+          <button
+            key={a.key}
+            onClick={() => handleRegenerateBlog(a.key)}
+            className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-800 transition-colors group"
+          >
+            <span className="text-sm font-medium">{a.label}</span>
+            <p className="text-xs text-neutral-500 group-hover:text-neutral-400">{a.desc}</p>
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={() => setShowAnglePicker(false)}
+        className="mt-2 w-full text-xs text-neutral-500 hover:text-neutral-300 py-1"
+      >
+        Cancel
+      </button>
+    </div>
+  )}
+
+  <textarea
+    value={formData.content}
+    onChange={(e) => setFormData((prev) => ({ ...prev, content: e.target.value }))}
+    rows={12}
+    className="w-full px-4 py-3 bg-neutral-800/50 border border-neutral-700 focus:border-primary rounded-lg text-white transition-all duration-300 focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+    placeholder="Write your post content here (HTML supported)"
+    disabled={saving || regenerating}  // also disable during regenerating
+  />
+</div>
 
               {/* SEO */}
               <div className="space-y-4">
@@ -648,18 +863,34 @@ const AdminBlog: React.FC = () => {
               </div>
 
               {/* Publish Status */}
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="isPublished"
-                  checked={formData.isPublished}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, isPublished: e.target.checked }))}
-                  className="w-4 h-4 text-primary bg-neutral-800 border-neutral-700 rounded focus:ring-primary focus:ring-2"
-                  disabled={saving}
-                />
-                <label htmlFor="isPublished" className="text-sm font-medium">
-                  Publish immediately
-                </label>
+              <div>
+                <label className="block text-sm font-medium mb-2">Status</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="status"
+                      value="draft"
+                      checked={formData.status === "draft"}
+                      onChange={() => setFormData((prev) => ({ ...prev, status: "draft" }))}
+                      className="w-4 h-4 accent-primary"
+                      disabled={saving}
+                    />
+                    <span className="text-sm">Draft</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="status"
+                      value="published"
+                      checked={formData.status === "published"}
+                      onChange={() => setFormData((prev) => ({ ...prev, status: "published" }))}
+                      className="w-4 h-4 accent-primary"
+                      disabled={saving}
+                    />
+                    <span className="text-sm">Published</span>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -679,6 +910,114 @@ const AdminBlog: React.FC = () => {
                   <Save size={16} />
                 )}
                 {saving ? "Saving..." : editingPost ? "Update Post" : "Create Post"}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Generate Modal */}
+      {showGenerateModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-neutral-900 rounded-xl w-full max-w-md"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-neutral-800">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">✨</span>
+                <h2 className="text-xl font-orbitron font-bold">Generate with AI</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowGenerateModal(false)
+                  setGenerateError(null)
+                  setGenerateTopic("")
+                  setGenerateCategory("")
+                }}
+                className="p-2 rounded-lg hover:bg-neutral-800 transition-colors hover-effect"
+                disabled={generating}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4">
+              {generateError && (
+                <motion.div
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg flex items-center gap-2"
+                >
+                  <AlertCircle size={16} />
+                  <span>{generateError}</span>
+                </motion.div>
+              )}
+
+              {/* Topic Input */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Topic <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={generateTopic}
+                  onChange={(e) => setGenerateTopic(e.target.value)}
+                  rows={3}
+                  className="w-full px-4 py-3 bg-neutral-800/50 border border-neutral-700 focus:border-primary rounded-lg text-white transition-all duration-300 focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                  placeholder="e.g., The future of React 19 in web development and best practices"
+                  disabled={generating}
+                />
+              </div>
+
+              {/* Category Select */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Category <span className="text-red-400">*</span>
+                </label>
+                <select
+                  value={generateCategory}
+                  onChange={(e) => setGenerateCategory(e.target.value)}
+                  className="w-full px-4 py-3 bg-neutral-800/50 border border-neutral-700 focus:border-primary rounded-lg text-white transition-all duration-300 focus:outline-none focus:ring-1 focus:ring-primary"
+                  disabled={generating}
+                >
+                  <option value="">Select a category</option>
+                  {categories.map((category) => (
+                    <option key={category._id} value={category.name}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-4 p-6 border-t border-neutral-800">
+              <button
+                onClick={() => {
+                  setShowGenerateModal(false)
+                  setGenerateError(null)
+                  setGenerateTopic("")
+                  setGenerateCategory("")
+                }}
+                className="btn btn-outline hover-effect"
+                disabled={generating}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerateBlog}
+                className="btn btn-primary neon-border hover-effect flex items-center gap-2"
+                disabled={generating}
+              >
+                {generating ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <span>✨</span>
+                )}
+                {generating ? "Generating..." : "Generate"}
               </button>
             </div>
           </motion.div>

@@ -49,6 +49,11 @@ const blogSchema = new mongoose.Schema({
         keywords: [{
             type: String
         }]
+    },
+    status: {
+        type: String,
+        enum: ["draft", "published"],
+        default: "published"
     }
 },
     { timestamps: true });
