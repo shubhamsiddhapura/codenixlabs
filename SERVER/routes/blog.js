@@ -21,33 +21,27 @@ import { generateBlog } from '../controllers/blogGenerate.js';
 
 const router = express.Router();
 
-// Basic CRUD Routes
-router.post('/', createBlog);                    // POST /api/blogs
-router.get('/', getAllBlogs);                    // GET /api/blogs
-router.get('/:id', getBlogById);                 // GET /api/blogs/:id
-router.put('/:id', updateBlog);                  // PUT /api/blogs/:id
-router.delete('/:id', deleteBlog);               // DELETE /api/blogs/:id
+// 1. Static/specific routes FIRST
+router.get('/featured/posts', getFeaturedBlogs);
+router.get('/search/posts', searchBlogs);
+router.get('/stats/analytics', getBlogStats);
+router.get('/meta/categories', getCategories);
+router.get('/meta/tags', getTags);
+router.get('/og/home', getHomeOG);
+router.get('/og/:slug', getBlogOG);
+router.get('/category/:category', getBlogsByCategory);
+router.get('/author/:author', getBlogsByAuthor);
+router.get('/tag/:tag', getBlogsByTag);
+router.get('/slug/:slug', getBlogBySlug);
 
-// Special routes (should come before parameterized routes)
-router.post('/generate', generateBlog);          // POST /api/blogs/generate
-router.get('/featured/posts', getFeaturedBlogs); // GET /api/blogs/featured/posts
-router.get('/search/posts', searchBlogs);        // GET /api/blogs/search/posts
-router.get('/stats/analytics', getBlogStats);    // GET /api/blogs/stats/analytics
+// 2. Parameterized routes LAST
+router.post('/', createBlog);
+router.get('/', getAllBlogs);
+router.get('/:id', getBlogById);     // ← must be last among GETs
+router.put('/:id', updateBlog);
+router.delete('/:id', deleteBlog);
 
-// Utility routes for categories and tags
-router.get('/meta/categories', getCategories);   // GET /api/blogs/meta/categories
-router.get('/meta/tags', getTags);               // GET /api/blogs/meta/tags
-
-// OG data for social crawlers (must come before parameterized routes)
-router.get('/og/home', getHomeOG);              // GET /api/blogs/og/home
-router.get('/og/:slug', getBlogOG);             // GET /api/blogs/og/:slug
-
-// Filtering routes
-router.get('/category/:category', getBlogsByCategory); // GET /api/blogs/category/:category
-router.get('/author/:author', getBlogsByAuthor);       // GET /api/blogs/author/:author
-router.get('/tag/:tag', getBlogsByTag);                // GET /api/blogs/tag/:tag
-
-// SEO-friendly slug route (should be last to avoid conflicts)
-router.get('/slug/:slug', getBlogBySlug);        // GET /api/blogs/slug/:slug
+// POST /generate also needs to be before /:id but it's POST so no conflict
+router.post('/generate', generateBlog);
 
 export default router;
