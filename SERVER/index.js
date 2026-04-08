@@ -23,7 +23,6 @@ app.use(cors({
         if (!origin) {
             return callback(null, true);
         }
-        
         if (allowedOrigins.includes(origin) || /localhost/.test(origin) || process.env.NODE_ENV === 'development') {
             callback(null, true);
         } else {
@@ -35,16 +34,15 @@ app.use(cors({
 
 app.use(express.json());
 
-// Minimal production logging
+// Log every request + response status
 app.use((req, res, next) => {
-    if (req.path.includes('/api/blogs/og')) {
-        console.log(`[OG] ${req.path}`);
-    }
+    const start = Date.now();
+    console.log(`[REQ] ${req.method} ${req.path} | origin: ${req.headers.origin || 'none'}`);
+    res.on('finish', () => {
+        console.log(`[RES] ${req.method} ${req.path} → ${res.statusCode} (${Date.now() - start}ms)`);
+    });
     next();
 });
-
-// Note: Crawler detection handled at Vercel edge level via vercel.json rewrites
-// This backend only needs to serve the OG endpoint for crawlers that access it directly
 
 app.use('/api/blogs', blogRoutes);
 app.use('/api/og', ogImageRoutes);
@@ -67,6 +65,15 @@ function escapeHtml(text) {
   };
   return String(text || '').replace(/[&<>"']/g, m => map[m]);
 }
+
+// Global error handler — must be last, after all routes
+app.use((err, req, res, next) => {
+    console.error(`[ERROR] ${req.method} ${req.path} | ${err.message}`);
+    console.error(err.stack);
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.status(err.status || 500).json({ success: false, message: err.message });
+});
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
