@@ -55,16 +55,25 @@ const projects: Project[] = [
   // Website Projects
   {
     id: 1,
-    title: "eBuddy - Recommerce Platform",
-    description: "Ebuddy turns your old electronics into new opportunities — get the best price from trusted shopkeepers in just a few clicks.",
+    title: "Appalachian",
+    description: "A polished, immersive digital experience for Appalachian, crafted with a modern visual hierarchy, strong storytelling, and conversion-friendly sections.",
     category: "Websites",
-    image: "/portfolio/websites/ebuddy.png",
-    technologies: ["React", "TypeScript", "Node.js", "MongoDB", "Socket.io"],
-    link: "https://www.ebuddyy.com/",
+    image: "/portfolio/websites/appalachian.png",
+    technologies: ["React", "TypeScript", "Tailwind CSS", "Framer Motion"],
+    link: "https://appalachian-web.vercel.app/",
+  },
+  {
+    id: 2,
+    title: "Postura By Physio",
+    description: "A premium wellness website for Postura By Physio with a calm, trustworthy look and a smooth browsing experience tailored to clinic services.",
+    category: "Websites",
+    image: "/portfolio/websites/posturabyphysio.png",
+    technologies: ["React", "Vite", "Tailwind CSS", "Responsive UI"],
+    link: "https://www.posturabyphysio.com/",
   },
   // UI/UX Projects
   {
-    id: 2,
+    id: 3,
     title: "Link N Date - Dating App",
     description: "Modern dating application UI/UX design focused on meaningful connections and user safety.",
     category: "UI / UX Design",
@@ -80,7 +89,7 @@ const projects: Project[] = [
   },
   // Graphic Design Projects
   {
-    id: 3,
+    id: 4,
     title: "Postura Brand Logo",
     description: "Professional logo design for Postura physiotherapy brand",
     category: "Graphic Design",
@@ -88,7 +97,7 @@ const projects: Project[] = [
     type: "Logo"
   },
   {
-    id: 4,
+    id: 5,
     title: "Postura Visiting Cards",
     description: "Premium visiting card design with front and back layouts for Postura physiotherapy clinic",
     category: "Graphic Design",
@@ -99,7 +108,7 @@ const projects: Project[] = [
     type: "Visiting Card"
   },
   {
-    id: 5,
+    id: 6,
     title: "Postura Marketing Flyers",
     description: "Creative promotional flyer designs for Postura physiotherapy services",
     category: "Graphic Design",
@@ -108,6 +117,15 @@ const projects: Project[] = [
       "/portfolio/graphicDesign/posture_flyers/postura_2.jpeg"
     ],
     type: "Flyer"
+  },
+  {
+    id: 7,
+    title: "eBuddy - Recommerce Platform",
+    description: "Ebuddy turns your old electronics into new opportunities — get the best price from trusted shopkeepers in just a few clicks.",
+    category: "Websites",
+    image: "/portfolio/websites/ebuddy.png",
+    technologies: ["React", "TypeScript", "Node.js", "MongoDB", "Socket.io"],
+    link: "https://www.ebuddyy.com/",
   }
 ];
 
@@ -438,7 +456,7 @@ const WebsiteModal: React.FC<{
         {/* Image */}
         <div className="relative w-full h-56 sm:h-72 md:h-80 lg:h-96 bg-neutral-900 flex-shrink-0">
           <img
-            src="/portfolio/websites/ebuddy2.png"
+            src={project.image}
             alt={project.title}
             className="w-full h-full object-cover"
           />
