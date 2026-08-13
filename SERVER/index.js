@@ -5,9 +5,10 @@ import cors from 'cors'
 import blogRoutes from './routes/blog.js'
 import ogImageRoutes from './routes/ogImage.js'
 import Blog from './models/blog.js'
+import { fileURLToPath } from 'url';
 
 const app = express();
-dotenv.config();
+dotenv.config({ path: fileURLToPath(new URL('./.env', import.meta.url)) });
 const PORT = process.env.PORT || 4000;
 
 connectDB();

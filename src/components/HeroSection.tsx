@@ -15,6 +15,19 @@ const HeroSection: React.FC = () => {
   useEffect(() => {
     if (!sectionRef.current || !headingRef.current) return;
 
+    /**
+     * Split once, ever.
+     *
+     * This effect runs twice in development (StrictMode) and again on every
+     * client-side return to the homepage. Re-splitting rebuilt the letter spans
+     * underneath the tween that was animating them, so the reveal never
+     * finished and the headline stayed at opacity 0 — an invisible H1 on the
+     * homepage, which costs a human reader everything and an AI crawler the
+     * page's single most important line.
+     */
+    if (headingRef.current.dataset.split === 'true') return;
+    headingRef.current.dataset.split = 'true';
+
     const words = headingRef.current.innerText.split(' ');
     headingRef.current.innerHTML = '';
 
@@ -41,15 +54,15 @@ const HeroSection: React.FC = () => {
       }
     });
 
-    // Animate letters
+    // Animate letters. `fromTo` rather than `to`, so the end state is stated
+    // explicitly — if the tween is ever interrupted, the letters land visible
+    // rather than stuck at the opacity-0 they started from.
     const letters = headingRef.current.querySelectorAll('span span');
-    gsap.to(letters, {
-      opacity: 1,
-      duration: 0.05,
-      stagger: 0.03,
-      ease: 'power1.out',
-      delay: 0.5
-    });
+    const reveal = gsap.fromTo(
+      letters,
+      { opacity: 0 },
+      { opacity: 1, duration: 0.05, stagger: 0.03, ease: 'power1.out', delay: 0.5 },
+    );
 
     // Parallax effect on scroll
     gsap.fromTo(
@@ -68,6 +81,10 @@ const HeroSection: React.FC = () => {
     );
 
     return () => {
+      // Leave the headline readable on the way out. Killing the tween mid-flight
+      // without this is what left the H1 invisible.
+      reveal.progress(1);
+      reveal.kill();
       ScrollTrigger.getAll().forEach(trigger => trigger.kill());
     };
   }, []);

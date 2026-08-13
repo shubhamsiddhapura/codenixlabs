@@ -31,6 +31,7 @@ const Navbar: React.FC = () => {
   const navItems = [
     { name: 'Home', path: '/' },
     { name: 'Services', path: '/services' },
+    { name: 'AI Readiness', path: '/ai-readiness' },
     { name: 'Portfolio', path: '/portfolio' },
     { name: 'About', path: '/about' },
     { name: 'Blog', path: '/blog' },
@@ -64,13 +65,13 @@ const Navbar: React.FC = () => {
           </Link>
 
           {/* Desktop Menu */}
-          <div className="items-center hidden space-x-8 md:flex">
+          <div className="items-center hidden gap-5 md:flex lg:gap-8">
             {navItems.map((item) => (
               <Link
                 key={item.name}
                 to={item.path}
                 aria-label={item.name}
-                className={`relative hover-effect font-medium transition-colors hover:text-primary ${location.pathname === item.path ? 'text-primary' : 'text-white'
+                className={`relative hover-effect whitespace-nowrap text-sm font-medium transition-colors hover:text-primary lg:text-base ${location.pathname === item.path ? 'text-primary' : 'text-white'
                   }`}
               >
                 {item.name}

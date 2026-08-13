@@ -9,6 +9,8 @@ import HeroSection from '../components/HeroSection';
 import ServiceCard from '../components/ServiceCard';
 import BlogCard from '../components/BlogCard';
 import TestimonialCard, { Testimonial } from '../components/TestimonialCard';
+import AiReadinessBand from '../components/home/AiReadinessBand';
+import WhyCodenix from '../components/home/WhyCodenix';
 import { BlogService } from '../services/blogService';
 import { BlogPost } from '../types/blog';
 
@@ -193,6 +195,9 @@ const Home: React.FC = () => {
     >
       {/* Hero Section */}
       <HeroSection />
+
+      {/* Free AI Readiness scanner — the fastest way to prove value */}
+      <AiReadinessBand />
 
       {/* Services Section */}
       <section className="relative py-20">
@@ -506,6 +511,9 @@ const Home: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Why Codenix Labs */}
+      <WhyCodenix />
 
       {/* Testimonials Section */}
       <section className="relative py-20 overflow-hidden">
