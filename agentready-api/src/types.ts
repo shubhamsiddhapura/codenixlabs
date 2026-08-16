@@ -85,6 +85,36 @@ export interface CheckResult {
    * fix.
    */
   generatedFixTarget: string | null;
+  /**
+   * Per-crawler access, for the bot-access check only.
+   *
+   * We already work all of this out — eleven crawlers judged against robots.txt,
+   * three of them plus a control asked for the homepage directly — and then
+   * throw it away into a single sentence. A visitor cannot check a sentence.
+   * A table naming each assistant and how we decided is inspectable, and it is
+   * the one part of the report someone can verify against their own server logs.
+   */
+  agentAccess?: AgentAccessRow[];
+}
+
+export type AgentAccessStatus =
+  /** robots.txt permits it, and where we tested live, the server served it. */
+  | 'allowed'
+  /** A rule in robots.txt disallows it. */
+  | 'blocked_robots'
+  /** robots.txt permits it but the server refused the live request. */
+  | 'blocked_server';
+
+export interface AgentAccessRow {
+  /** The user-agent token, e.g. GPTBot. */
+  agent: string;
+  /** What that crawler is, in the words a site owner uses. */
+  label: string;
+  status: AgentAccessStatus;
+  /** True when this row comes from an actual request rather than a file. */
+  liveTested: boolean;
+  /** The rule or status code behind the verdict, when there is one. */
+  detail: string | null;
 }
 
 export type FixLanguage = 'robots' | 'json' | 'html' | 'markdown';

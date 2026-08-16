@@ -2,6 +2,7 @@ import { CheckOutcome } from '../../types';
 import { ScanContext, allPages } from '../scanContext';
 import { HtmlDocument, typesOf } from '../htmlDocument';
 import { isSameSite } from '../../utils/url';
+import { clientRenderWarning } from './crawlability';
 
 /**
  * Check 7 — can a model parse and attribute this page?
@@ -100,7 +101,8 @@ export function checkContentStructure(context: ScanContext): CheckOutcome {
       (status === 'fail'
         ? 'Together these mean an assistant reading your page has to guess where your content starts, what it is called and which version of the URL is the real one — so it quotes you badly, or skips you for a competitor whose page it can parse cleanly. '
         : 'These are small edits with a disproportionate effect on how cleanly you get quoted. ') +
-      'The block below covers the parts that are copy-pasteable; the rest are edits to your page template.',
+      'The block below covers the parts that are copy-pasteable; the rest are edits to your page template.' +
+      clientRenderWarning(context.homepage),
     generatedFix: fix,
     generatedFixTarget: 'The <head> section of every page on your site',
   };

@@ -316,6 +316,35 @@ console.log('\nCheck 1 — AI bot access (robots.txt)');
   const wooDefaults = parseRobotsTxt('User-agent: *\nDisallow: /wp-admin/\nAllow: /wp-admin/admin-ajax.php\nDisallow: /cart/\nDisallow: /checkout/\nDisallow: /my-account/');
   assertStatus('stock WooCommerce rules → pass', checkBotAccess(context({ robotsTxt: robotsResponse, robots: wooDefaults })), 'pass');
 
+  /**
+   * A WordPress blog in a subfolder. The housekeeping patterns used to be
+   * anchored to the start of the path, so `/wp-admin/` was recognised and
+   * `/blog/wp-admin/` was not — plixlife.com was told it blocked real content
+   * when it blocks nothing but its own admin screen.
+   */
+  const nestedAdmin = parseRobotsTxt(
+    'User-agent: *\nDisallow: /blog/wp-admin/\nAllow: /blog/wp-admin/admin-ajax.php\nDisallow: /en/cart',
+  );
+  assertStatus(
+    'housekeeping nested under a subfolder → pass',
+    checkBotAccess(context({ robotsTxt: robotsResponse, robots: nestedAdmin })),
+    'pass',
+  );
+
+  /**
+   * A rule value must be a path, not a full URL. Crawlers discard these lines,
+   * so the owner believes a page is blocked when it is not — worth saying, and
+   * worth saying without changing their score for it.
+   */
+  const absoluteUrls = parseRobotsTxt('User-agent: *\nDisallow:https://shop.test/login/\nDisallow: /cart');
+  assert('absolute-URL rule is recorded as a defect', absoluteUrls.defects.length === 1, JSON.stringify(absoluteUrls.defects));
+  assert('  and cites the offending line number', absoluteUrls.defects[0].line === 2, String(absoluteUrls.defects[0]?.line));
+  assert('  while the path is still usable for matching', absoluteUrls.groups[0].rules[0].path === '/login/', absoluteUrls.groups[0].rules[0].path);
+
+  const defectOutcome = checkBotAccess(context({ robotsTxt: robotsResponse, robots: absoluteUrls }));
+  assertStatus('  an ignored rule does not cost points', defectOutcome, 'pass');
+  assert('  but the report says the line is being skipped', defectOutcome.humanExplanation.includes('crawlers cannot read'));
+
   // Multi-market stores repeat every housekeeping rule behind a locale wildcard.
   const localised = parseRobotsTxt(
     'User-agent: *\nDisallow: /*/cart/\nDisallow: /*/checkout\nDisallow: /*/checkouts/\nDisallow: /*/orders\nDisallow: /*/account\nDisallow: /services\nDisallow: /*/services',
@@ -481,8 +510,11 @@ console.log('\nCheck 2 — machine-readable agent interface');
   // JSON cannot carry a comment, so the path has to travel beside the block.
   assert('  and says exactly where to save it, since JSON cannot say so itself', Boolean(noUcp.generatedFixTarget?.includes('/.well-known/ucp')), String(noUcp.generatedFixTarget));
 
+  // We tell the reader nothing reads llms.txt, so we must not then hand them
+  // one to publish. A fix for a problem we just called a placebo would discredit
+  // the paragraph above it.
   const blogNoLlmsTarget = checkAgentInterface(context({ siteType: 'content', profile: profileFor('content'), agentArtifacts: { 'llms.txt': MISSING } }));
-  assert('llms.txt fix points at the site root', Boolean(blogNoLlmsTarget.generatedFixTarget?.includes('/llms.txt')), String(blogNoLlmsTarget.generatedFixTarget));
+  assert('no llms.txt fix is offered where it scores nothing', blogNoLlmsTarget.generatedFixTarget === null, String(blogNoLlmsTarget.generatedFixTarget));
 
   // The shape Shopify actually serves: everything under a `ucp` envelope, with
   // `services` endpoints instead of a business_name field.
@@ -549,10 +581,13 @@ console.log('\nCheck 2 — machine-readable agent interface');
   const blogNoLlms = checkAgentInterface(context({ siteType: 'content', profile: profileFor('content'), agentArtifacts: { 'llms.txt': MISSING } }));
   assertStatus('blog with no llms.txt → not scored, not a failure', blogNoLlms, 'skipped');
   assert('  and says plainly that nothing reads the file', blogNoLlms.humanExplanation.includes('no AI system currently reads llms.txt'));
-  assert('  while still handing over the file if they want it', Boolean(blogNoLlms.generatedFix));
   assert('  it is worth zero points either way', weightsFor('content').agent_interface === 0);
-  assert('  the fix is markdown, not JSON', blogNoLlms.generatedFixLanguage === 'markdown');
-  assert('  the generated llms.txt has a heading and a summary', Boolean(blogNoLlms.generatedFix?.startsWith('# ')) && Boolean(blogNoLlms.generatedFix?.includes('\n> ')));
+  // Consistency is the point. Saying "nothing reads this" and then generating
+  // the file anyway is the contradiction a sharp reader uses to dismiss the
+  // rest of the report.
+  assert('  and offers no file to create, matching its own advice', blogNoLlms.generatedFix === null);
+  assert('  no dangling language or destination either', blogNoLlms.generatedFixLanguage === null && blogNoLlms.generatedFixTarget === null);
+  assert('  and says why it is not giving one', blogNoLlms.humanExplanation.includes('not giving you a file'));
 
   assertStatus(
     'blog with a good llms.txt → still not scored, just acknowledged',

@@ -40,6 +40,24 @@ export interface AuditTrail {
   method: string;
 }
 
+export type AgentAccessStatus = 'allowed' | 'blocked_robots' | 'blocked_server';
+
+/**
+ * One crawler's verdict, with how it was reached.
+ *
+ * `liveTested` is the important column. "robots.txt allows GPTBot" is a reading
+ * of a file; "the server returned 200 to a request from GPTBot" is an
+ * observation. Showing which one produced each row is what makes this table
+ * checkable against someone's own access logs.
+ */
+export interface AgentAccessRow {
+  agent: string;
+  label: string;
+  status: AgentAccessStatus;
+  liveTested: boolean;
+  detail: string | null;
+}
+
 export interface ScanCheck {
   checkId: CheckId;
   title: string;
@@ -53,6 +71,8 @@ export interface ScanCheck {
   generatedFixLanguage: FixLanguage | null;
   /** Exactly where the block goes — a file path, or a place in the page. */
   generatedFixTarget: string | null;
+  /** Bot-access check only. Shipped before the gate — it is evidence, not advice. */
+  agentAccess?: AgentAccessRow[];
   locked: boolean;
 }
 
@@ -66,7 +86,7 @@ export interface TeaserScan {
   overallGrade: Grade;
   overallScore: number;
   summary: string;
-  teaserChecks: Pick<ScanCheck, 'checkId' | 'title' | 'status' | 'details' | 'locked'>[];
+  teaserChecks: Pick<ScanCheck, 'checkId' | 'title' | 'status' | 'details' | 'agentAccess' | 'locked'>[];
   lockedChecks: number;
   fixesAvailable: number;
   jsRenderWarning: boolean;
@@ -125,6 +145,58 @@ export interface LeadInput {
 export interface UnlockResult {
   scan: FullScan;
   emailed: boolean;
+}
+
+/** One past scan of the same domain, as listed in the history panel. */
+export interface RunSummary {
+  scanId: string;
+  scannedAt: string;
+  overallGrade: Grade;
+  overallScore: number;
+  siteType: SiteType;
+  scoringVersion: string;
+  partial: boolean;
+}
+
+export type CheckChange = 'improved' | 'regressed' | 'unchanged' | 'appeared' | 'disappeared';
+
+export interface CheckDiff {
+  checkId: CheckId;
+  title: string;
+  before: { status: CheckStatus; pointsAwarded: number; pointsPossible: number } | null;
+  after: { status: CheckStatus; pointsAwarded: number; pointsPossible: number } | null;
+  change: CheckChange;
+}
+
+/**
+ * Two runs of the same site held against each other.
+ *
+ * `comparable` is false when the runs came from different scoring rules or a
+ * different site-type judgement. The per-check verdicts survive that; only the
+ * score difference is withheld, because a number that mixes our weight changes
+ * with the site's actual changes is worse than no number.
+ */
+export interface RunComparison {
+  domain: string;
+  before: RunSummary;
+  after: RunSummary;
+  comparable: boolean;
+  incomparableReason: string | null;
+  scoreDelta: number | null;
+  checks: CheckDiff[];
+}
+
+export interface ScanStats {
+  /** Every scan ever run, including repeats of the same domain. */
+  totalScans: number;
+  /** Distinct domains — the honest "how many sites have been checked". */
+  sitesChecked: number;
+}
+
+export interface ScanHistory {
+  domain: string;
+  current: string;
+  runs: RunSummary[];
 }
 
 export interface ComparisonResult {

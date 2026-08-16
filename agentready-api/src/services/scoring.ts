@@ -25,7 +25,7 @@ export const TOTAL_POINTS = 100;
  * objective, but it makes them fixed, comparable over time, and visibly changed
  * when they change. A before/after score is only meaningful within one version.
  */
-export const SCORING_VERSION = '1.2.0';
+export const SCORING_VERSION = '1.6.0';
 
 /**
  * Checks whose failure is not a matter of opinion.
@@ -101,11 +101,43 @@ export function toGrade(score: number): Grade {
   return 'F';
 }
 
+/**
+ * Checks that should have been scored and could not be.
+ *
+ * Excludes anything weighted zero on purpose — llms.txt is "not scored" for
+ * most site types by design, and counting it here would make every ordinary
+ * scan look half-blind.
+ */
+function unverifiedCount(checks: CheckResult[], siteType: SiteType): number {
+  const weights = weightsFor(siteType);
+  return checks.filter((check) => check.status === 'skipped' && weights[check.checkId] > 0).length;
+}
+
 /** The one-line summary shown next to the grade in the free teaser. */
 export function buildSummary(grade: Grade, checks: CheckResult[], siteType: SiteType): string {
   const failed = checks.filter((check) => check.status === 'fail');
   const warned = checks.filter((check) => check.status === 'warning');
   const noun = SITE_PROFILES[siteType].label;
+
+  /**
+   * A grade drawn from two checks is not the same claim as a grade drawn from
+   * seven, and the letter alone cannot tell them apart.
+   *
+   * Removing unverifiable checks from the total is the right call — we will not
+   * charge anyone for our own blind spots — but it cuts both ways: a site that
+   * blocked us scored a confident B off two checks, and nothing in the sentence
+   * next to that B admitted how little we had actually seen. Saying it here is
+   * the other half of that honesty.
+   */
+  const unverified = unverifiedCount(checks, siteType);
+  if (unverified >= 3) {
+    const scored = checks.length - unverified;
+    return (
+      `We could only verify ${scored} of ${checks.length} checks on your ${noun} — the rest we could not see, ` +
+      `so this grade reflects a narrow view rather than a clean bill of health. ` +
+      `What we could check, you ${failed.length ? 'did not pass' : warned.length ? 'mostly passed' : 'passed'}.`
+    );
+  }
 
   if (grade === 'A') {
     return warned.length

@@ -25,8 +25,8 @@ async function classify(input: string): Promise<void> {
   const robots = robotsTxt.ok && robotsTxt.body ? parseRobotsTxt(robotsTxt.body) : null;
   const sitemap = await collectSitemapUrls(origin, robots?.sitemaps ?? [], deadline);
 
-  const verdict = detectSiteType(homepage, sitemap.urls);
-  const scores = scoreSiteTypes(homepage, sitemap.urls);
+  const verdict = detectSiteType(homepage, sitemap.urls, robots);
+  const scores = scoreSiteTypes(homepage, sitemap.urls, robots);
 
   console.log(`\n${'='.repeat(72)}`);
   console.log(`${origin}`);

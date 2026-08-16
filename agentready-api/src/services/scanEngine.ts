@@ -67,7 +67,9 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
 
   // Classify before sampling: a blog and a store want completely different
   // pages fetched, and fetching the wrong ones wastes the budget.
-  const detected = detectSiteType(homepage, sitemap.urls);
+  // robots.txt is passed in because on sites that refuse our scanner it is the
+  // only structural evidence we have — see robotsPathsOf in siteType.ts.
+  const detected = detectSiteType(homepage, sitemap.urls, robots);
   const verdict = options.siteType
     ? { siteType: options.siteType, confidence: 'high' as const, evidence: ['you told us what kind of site this is'] }
     : detected;

@@ -1,6 +1,7 @@
 import { CheckOutcome, RenderMode } from '../../types';
 import { ScanContext, allPages } from '../scanContext';
 import { HtmlDocument } from '../htmlDocument';
+import { LIVE_PROBE_BOTS } from './botAccess';
 
 /**
  * Check 6 — basic crawlability / response health.
@@ -55,6 +56,42 @@ export function checkCrawlability(context: ScanContext): CrawlabilityResult {
   const pages = allPages(context);
 
   if (homepage.blocked) {
+    /**
+     * Turned away — but by whom, and does it matter?
+     *
+     * If the AI crawlers were served the same page we were refused, the site is
+     * not broken; it is correctly configured. Strict with strangers, open to
+     * the crawlers that count. Failing it here would be reporting *our* lack of
+     * access as *their* defect, and on a large retailer that single
+     * ten-point failure was the difference between a D and a passing grade
+     * while ChatGPT was being served normally the whole time.
+     *
+     * We genuinely cannot say whether their pages render, so the honest status
+     * is "could not verify" — the same answer we give everywhere else we were
+     * unable to look.
+     */
+    const servedToAiBots = LIVE_PROBE_BOTS.filter(({ agent }) => context.botProbes[agent]?.ok);
+
+    if (servedToAiBots.length) {
+      const names = servedToAiBots.map((bot) => bot.label).join(', ');
+      return {
+        jsRenderWarning: false,
+        renderMode: 'server_rendered',
+        outcome: {
+          ...base,
+          status: 'skipped',
+          details: `Homepage returned HTTP ${homepage.status} to our scanner, but was served normally to ${servedToAiBots
+            .map((bot) => bot.agent)
+            .join(', ')} — not scored.`,
+          humanExplanation:
+            `Your server turned our scanner away, but served your homepage normally when we asked as ${names}. ` +
+            'That is a correct setup rather than a problem: strict with visitors it does not recognise, open to the crawlers that matter. ' +
+            'It does mean we never saw your HTML, so we could not check whether your content is actually in the page or built afterwards by JavaScript. ' +
+            'This has been left out of your score rather than counted against you. To check it yourself: open a page, view the page source, and search it for your own headline — if it is there, you are fine.',
+        },
+      };
+    }
+
     return {
       jsRenderWarning: false,
       renderMode: 'server_rendered',
@@ -63,7 +100,7 @@ export function checkCrawlability(context: ScanContext): CrawlabilityResult {
         status: 'fail',
         details: `Homepage returned HTTP ${homepage.status} to our scanner (bot challenge or block).`,
         humanExplanation:
-          "We couldn't access your site directly — your server turned our scanner away. " +
+          "We couldn't access your site directly — your server turned our scanner away, and it turned away the AI crawlers too. " +
           'That is usually a bot-protection setting (Cloudflare, a firewall rule, or a security plugin) doing its job a little too broadly. ' +
           'It is worth checking manually, because the same rule that stopped us can stop ChatGPT, Claude and Perplexity from reading your store, and unlike us they will not tell you. ' +
           'Ask whoever manages your hosting to allow the AI crawler user-agents listed in the robots.txt fix above through your bot protection.',
@@ -161,8 +198,10 @@ export function checkCrawlability(context: ScanContext): CrawlabilityResult {
         details: `${slow.detail} (${brokenPages.length} broken page(s)).`,
         humanExplanation:
           `Your pages load, but slowly — ${slow.detail}. ` +
-          'Crawlers budget their time: a slow site gets visited less often, so new pages are discovered late and changes take longer to be noticed. It costs you with shoppers directly too. ' +
-          'Ask your hosting provider about time to first byte, and check whether your pages are being generated fresh on every request when they could be cached.',
+          'This costs you differently from the way it costs you in search. An assistant answering a question fetches several sources at once and works to a deadline, then writes the answer from whatever arrived in time. ' +
+          'A page that arrives late is not ranked lower — it is simply absent, there is no second attempt, and nothing in your analytics will ever show you it happened. ' +
+          'Ask your hosting provider about time to first byte, and check whether pages are being generated fresh on every request when they could be cached. ' +
+          'One note on our number: we time the complete response rather than the first byte, so treat it as an upper bound on how slow you are.',
       },
     };
   }
@@ -191,28 +230,93 @@ export function checkCrawlability(context: ScanContext): CrawlabilityResult {
     outcome: {
       ...base,
       status: 'pass',
-      details: `All ${pages.length} sampled page(s) returned HTTP 200 with readable text content in the HTML. Homepage responded in ${context.homepage.durationMs}ms.`,
+      details: `All ${pages.length} sampled page(s) returned HTTP 200 with readable text content in the HTML. Homepage responded in ${
+        context.homepage.durationMs
+      }ms — band ${responseBandOf(context.homepage.durationMs).grade}.`,
       humanExplanation:
         'Every page we checked loaded cleanly and its content was readable straight from the server, without needing JavaScript to run first. ' +
-        'That is exactly what an AI crawler needs, and a surprising number of modern sites fail it.',
+        'That is exactly what an AI crawler needs, and a surprising number of modern sites fail it. ' +
+        // Reported even on a pass. Speed is the one signal that degrades quietly
+        // — nobody notices drifting from 400ms to 1.5s until they are being left
+        // out of answers, and by then there is nothing in analytics to find.
+        `Your homepage answered in ${(context.homepage.durationMs / 1000).toFixed(1)}s, which is ${
+          responseBandOf(context.homepage.durationMs).note
+        } — worth watching, because assistants fetch competing sources in parallel and write the answer from whatever arrives first.`,
     },
   };
 }
 
 /**
- * Slow enough to cost the site crawl budget.
+ * Response-time bands, judged against how assistants actually retrieve.
  *
- * We measure the full response, not time-to-first-byte, so the threshold is
- * looser than Google's ~1.8s TTFB guidance — 4 seconds for a whole HTML
- * document is unambiguously slow on any connection, and below that the number
- * is reported without being penalised.
+ * A single "is it over four seconds" threshold got the mechanism wrong. Search
+ * engines rank a slow page lower; an assistant does something different and
+ * worse — it fetches several sources in parallel against a deadline and writes
+ * the answer from whatever arrived. Miss the deadline and you are not demoted,
+ * you are absent, with no ranking to appeal and nothing in your analytics
+ * showing it happened.
+ *
+ * So the bands below are graded rather than binary, and only the slowest one
+ * costs points: below that the number is reported so an owner can see which way
+ * they are drifting.
+ *
+ * Honest caveat, stated in the report: this is the *whole response*, not
+ * time-to-first-byte. TTFB would be the better measure and needs socket-level
+ * timing we do not collect. The bands are therefore looser than TTFB guidance —
+ * a full HTML document in 600ms is genuinely quick.
  */
-const SLOW_RESPONSE_MS = 4000;
+const RESPONSE_BANDS: { upTo: number; grade: string; note: string }[] = [
+  { upTo: 600, grade: 'A', note: 'comfortably inside any fetch deadline' },
+  { upTo: 1200, grade: 'B', note: 'fine for most retrieval' },
+  { upTo: 2500, grade: 'C', note: 'you start losing races against faster sources' },
+  { upTo: 4000, grade: 'D', note: 'at risk of being dropped from answers' },
+  { upTo: Infinity, grade: 'F', note: 'slower than most fetch deadlines allow' },
+];
+
+/** Only this band and worse costs points. */
+const PENALISED_FROM_MS = 4000;
+
+export function responseBandOf(ms: number): { grade: string; note: string } {
+  return RESPONSE_BANDS.find((band) => ms < band.upTo) ?? RESPONSE_BANDS[RESPONSE_BANDS.length - 1];
+}
 
 function responseTimeVerdict(context: ScanContext): { detail: string } | null {
   const homepage = context.homepage.durationMs;
-  if (homepage < SLOW_RESPONSE_MS) return null;
-  return { detail: `your homepage took ${(homepage / 1000).toFixed(1)} seconds to respond` };
+  if (homepage < PENALISED_FROM_MS) return null;
+  const band = responseBandOf(homepage);
+  return {
+    detail: `your homepage took ${(homepage / 1000).toFixed(1)} seconds to respond — band ${band.grade}, ${band.note}`,
+  };
+}
+
+/**
+ * A warning to attach to any fix that says "paste this into your <head>".
+ *
+ * On a site whose content is assembled in the browser, the obvious way to add
+ * meta tags or JSON-LD is a client-side helper — react-helmet, next/head used
+ * client-side, a useEffect that injects a script tag. All of them run *after*
+ * the JavaScript does, and the crawlers this report is about do not run
+ * JavaScript. So the tags exist only in a browser, and never in what a crawler
+ * receives.
+ *
+ * Without this, someone can follow our advice exactly, add perfect structured
+ * data, re-scan, and still fail — then reasonably conclude the tool is broken.
+ * We already know when it applies, because we detect the empty shell. Saying
+ * nothing is the worst failure a diagnostic can have: sending someone to do
+ * work that cannot possibly help them.
+ */
+export function clientRenderWarning(homepage: HtmlDocument): string {
+  const mode = renderModeOf(homepage);
+  if (mode === 'server_rendered') return '';
+
+  return (
+    ' One important warning before you paste anything: your pages are assembled in the browser rather than sent complete by the server. ' +
+    'That means adding these tags with a client-side tool — react-helmet, or anything that injects them after your JavaScript runs — will not fix this, ' +
+    'because the crawlers that need the tags never run your JavaScript and will not see them. ' +
+    'The tags have to be in the HTML your server sends. In practice that means server-side rendering or pre-rendering the page (Next.js, Nuxt, Astro or a prerender service), ' +
+    'or, for a single page such as your homepage, putting them directly in the index.html file that is served. ' +
+    'It is worth confirming this yourself first: open the page, view the page source, and search it for your own headline — if it is not there, neither are the tags you are about to add.'
+  );
 }
 
 function renderModeOf(page: HtmlDocument): RenderMode {

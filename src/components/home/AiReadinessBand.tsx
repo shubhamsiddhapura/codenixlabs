@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, BotIcon, Sparkles } from 'lucide-react';
 
 import ScanForm from '../aiReadiness/ScanForm';
+import ScanCounter from '../aiReadiness/ScanCounter';
 
 /**
  * The free tool, high on the homepage.
@@ -72,6 +73,9 @@ export const AiReadinessBand: React.FC = () => {
                 </span>
               ))}
             </div>
+
+            {/* Renders nothing until the count is worth showing — see ScanCounter. */}
+            <ScanCounter className="mt-6" />
 
             <button
               type="button"

@@ -30,16 +30,54 @@ export interface RobotsGroup {
   rules: RobotsRule[];
 }
 
+/** A line real crawlers will not honour, and why. */
+export interface RobotsDefect {
+  line: number;
+  raw: string;
+  reason: string;
+}
+
 export interface ParsedRobots {
   groups: RobotsGroup[];
   sitemaps: string[];
   /** True when the file had no parsable directives at all (e.g. an HTML 404 page). */
   empty: boolean;
+  /**
+   * Lines that parse but are not valid, so crawlers skip them.
+   *
+   * Worth surfacing rather than silently repairing: someone who wrote
+   * `Disallow: https://example.com/login/` believes that page is blocked, and it
+   * is not. Telling them the rule is being ignored is more useful than either
+   * honouring it or pretending it does not exist.
+   */
+  defects: RobotsDefect[];
+}
+
+/**
+ * A rule value must be a path, not a full URL (RFC 9309 §2.2.2).
+ *
+ * Writing the whole address is a common mistake — plixlife.com has three such
+ * lines — and crawlers discard them. We reduce the value to its path so the
+ * *intent* can still be classified (a blocked `/login/` is housekeeping either
+ * way), while recording the defect so the report can say the line is dead.
+ */
+function normaliseRulePath(value: string): { path: string; defect: string | null } {
+  if (!/^https?:\/\//i.test(value)) return { path: value, defect: null };
+  try {
+    const { pathname, search } = new URL(value);
+    return {
+      path: `${pathname}${search}`,
+      defect: 'uses a full URL where the standard requires a path, so crawlers ignore this line',
+    };
+  } catch {
+    return { path: value, defect: 'is not a valid path or URL, so crawlers ignore this line' };
+  }
 }
 
 export function parseRobotsTxt(text: string): ParsedRobots {
   const groups: RobotsGroup[] = [];
   const sitemaps: string[] = [];
+  const defects: RobotsDefect[] = [];
 
   let current: RobotsGroup | null = null;
   // A `User-agent` line right after another one extends the same group; one
@@ -87,7 +125,9 @@ export function parseRobotsTxt(text: string): ParsedRobots {
         current = { userAgents: ['*'], rules: [] };
         groups.push(current);
       }
-      current.rules.push({ type: field, path: value, line: i + 1 });
+      const { path, defect } = normaliseRulePath(value);
+      if (defect) defects.push({ line: i + 1, raw: withoutComment, reason: defect });
+      current.rules.push({ type: field, path, line: i + 1 });
       continue;
     }
 
@@ -96,7 +136,7 @@ export function parseRobotsTxt(text: string): ParsedRobots {
     lastWasUserAgent = false;
   }
 
-  return { groups, sitemaps, empty: directives === 0 };
+  return { groups, sitemaps, empty: directives === 0, defects };
 }
 
 /** The group a given bot would obey: exact user-agent match, else `*`, else none. */

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, Clipboard, FileCode2 } from 'lucide-react';
+import { Check, Clipboard, CornerDownRight, FileCode2 } from 'lucide-react';
 import type { FixLanguage } from '../../types/aiReadiness';
 
 const LANGUAGE_LABEL: Record<FixLanguage, string> = {
@@ -51,39 +51,63 @@ export const FixBlock: React.FC<{ code: string; language: FixLanguage | null; ta
   }[state];
 
   return (
-    <div className="mt-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-        <span className="inline-flex items-center gap-2 text-sm font-medium text-white">
-          <FileCode2 size={16} className="text-accent" aria-hidden="true" />
-          Copy-paste fix
-          {language ? <span className="font-normal text-neutral-500">· {LANGUAGE_LABEL[language]}</span> : null}
-        </span>
+    /*
+     * One bordered unit: instruction band on top, code below.
+     *
+     * The destination used to be a small grey line above a loud black box —
+     * set fainter and smaller than the code it explains, which is backwards.
+     * A generated block of JSON-LD is worth nothing to the person holding it
+     * until they know which file it belongs in, so that sentence now leads,
+     * at full body size, inside a band that visually owns the code beneath it.
+     */
+    <div className="mt-6 overflow-hidden border rounded-xl border-white/15">
+      <div className="px-4 py-3.5 bg-white/[0.04] border-b border-white/10">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-2 text-xs font-bold tracking-wider uppercase font-orbitron text-accent">
+            <FileCode2 size={15} aria-hidden="true" />
+            Copy this fix
+            {language ? <span className="font-medium normal-case tracking-normal text-neutral-500">· {LANGUAGE_LABEL[language]}</span> : null}
+          </span>
 
-        <button
-          type="button"
-          onClick={copy}
-          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${button.className}`}
-        >
-          {state === 'copied' ? <Check size={14} aria-hidden="true" /> : <Clipboard size={14} aria-hidden="true" />}
-          {button.label}
-        </button>
+          <button
+            type="button"
+            onClick={copy}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${button.className}`}
+          >
+            {state === 'copied' ? <Check size={14} aria-hidden="true" /> : <Clipboard size={14} aria-hidden="true" />}
+            {button.label}
+          </button>
+        </div>
+
+        {target ? (
+          <p className="mt-2.5 flex flex-wrap items-baseline gap-x-2 text-sm leading-relaxed text-neutral-200">
+            <span className="inline-flex items-center gap-1.5 font-semibold text-primary">
+              <CornerDownRight size={14} aria-hidden="true" />
+              Paste it into
+            </span>
+            <span className="break-all">{target}</span>
+          </p>
+        ) : null}
       </div>
 
-      {target ? (
-        <p className="mb-2 text-xs leading-relaxed text-neutral-400">
-          <span className="font-semibold text-neutral-300">Where this goes:</span> {target}
-        </p>
-      ) : null}
+      {/*
+        Wrapped, not side-scrolling.
 
+        One long line — a product description inside a JSON-LD block is often
+        200 characters — pushed the whole block into horizontal scroll, so the
+        reader saw a truncated line and had to drag sideways to read code they
+        are about to paste. Wrapping keeps every character on screen; copying
+        is unaffected because the newlines in the source are what get copied.
+      */}
       <pre
         ref={codeRef}
-        className="p-4 overflow-auto text-xs leading-relaxed border rounded-xl bg-neutral-900 border-white/10 text-neutral-200 max-h-96"
+        className="p-4 overflow-y-auto text-xs leading-relaxed whitespace-pre-wrap break-words bg-neutral-900 text-neutral-200 max-h-96"
       >
         <code>{code}</code>
       </pre>
 
-      <p aria-live="polite" className="mt-2 text-xs text-neutral-500 min-h-[1rem]">
-        {state === 'failed' ? 'We selected it for you — press Ctrl+C (or Cmd+C) to copy.' : ''}
+      <p aria-live="polite" className="px-4 text-xs text-neutral-500 empty:hidden">
+        {state === 'failed' ? <span className="block py-2">We selected it for you — press Ctrl+C (or Cmd+C) to copy.</span> : ''}
       </p>
     </div>
   );

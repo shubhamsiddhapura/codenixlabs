@@ -1,4 +1,4 @@
-import { CheckOutcome } from '../../types';
+import { AgentAccessRow, CheckOutcome } from '../../types';
 import { ScanContext } from '../scanContext';
 import { RobotsRule, isAllowed } from '../robotsTxt';
 import { pathOf } from '../../utils/url';
@@ -49,6 +49,23 @@ export const CONTROL_BOT = {
   userAgent: `Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html) ${PROBE_SUFFIX}`,
 };
 
+/**
+ * Every crawler we ask the server about directly.
+ *
+ * This was three, which left eight of the eleven rows in the access table
+ * inferred from a text file rather than observed. Reading robots.txt tells you
+ * what a site asked for; only a request tells you what it does — and that gap
+ * is the whole point of this check, so it should cover as much of the table as
+ * the time budget allows.
+ *
+ * `Google-Extended` is deliberately absent. It is a robots.txt directive for
+ * opting out of Gemini training, not a crawler that ever makes a request, so
+ * there is nothing to probe and a live row for it would be theatre.
+ *
+ * These run in parallel, so ten probes cost little more wall-clock than three —
+ * but see the control guard in buildAccessRows for what happens when a server
+ * starts rate-limiting halfway through the burst.
+ */
 export const LIVE_PROBE_BOTS: { agent: string; label: string; userAgent: string }[] = [
   {
     agent: 'GPTBot',
@@ -56,14 +73,49 @@ export const LIVE_PROBE_BOTS: { agent: string; label: string; userAgent: string 
     userAgent: `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.1; +https://openai.com/gptbot ${PROBE_SUFFIX}`,
   },
   {
+    agent: 'ChatGPT-User',
+    label: 'ChatGPT (when a user asks about you)',
+    userAgent: `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot ${PROBE_SUFFIX}`,
+  },
+  {
+    agent: 'OAI-SearchBot',
+    label: 'ChatGPT search',
+    userAgent: `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot ${PROBE_SUFFIX}`,
+  },
+  {
     agent: 'ClaudeBot',
     label: 'Claude',
     userAgent: `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ClaudeBot/1.0; +claudebot@anthropic.com ${PROBE_SUFFIX}`,
   },
   {
+    agent: 'Claude-User',
+    label: 'Claude (when a user asks about you)',
+    userAgent: `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; Claude-User/1.0; +claudebot@anthropic.com ${PROBE_SUFFIX}`,
+  },
+  {
     agent: 'PerplexityBot',
     label: 'Perplexity',
     userAgent: `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot ${PROBE_SUFFIX}`,
+  },
+  {
+    agent: 'Bingbot',
+    label: 'Bing / Copilot',
+    userAgent: `Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm) ${PROBE_SUFFIX}`,
+  },
+  {
+    agent: 'Amazonbot',
+    label: 'Amazon Alexa / Rufus',
+    userAgent: `Mozilla/5.0 (Linux; like Android) AppleWebKit/537.36 (KHTML, like Gecko) Mobile Safari/537.36 (compatible; Amazonbot/0.1; +https://developer.amazon.com/support/amazonbot) ${PROBE_SUFFIX}`,
+  },
+  {
+    agent: 'Applebot',
+    label: 'Apple Intelligence / Siri',
+    userAgent: `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15 (Applebot/0.1; +http://www.apple.com/go/applebot) ${PROBE_SUFFIX}`,
+  },
+  {
+    agent: 'CCBot',
+    label: 'Common Crawl (feeds many AI models)',
+    userAgent: `CCBot/2.0 (https://commoncrawl.org/faq/) ${PROBE_SUFFIX}`,
   },
 ];
 
@@ -94,9 +146,32 @@ export const AI_BOTS: { agent: string; label: string }[] = [
  * Verified against the live robots.txt of several Shopify and WooCommerce
  * stores; the patterns below are the platform defaults, not guesses.
  */
+/**
+ * Matched at any path segment, not only the first.
+ *
+ * These used to be anchored to the start of the path, which meant `/wp-admin/`
+ * was recognised and `/blog/wp-admin/` was not — so a WordPress blog living in a
+ * subfolder got warned for blocking its own admin screen. The same applied to
+ * `/en/cart` and every other localised or nested variant.
+ *
+ * The boundaries are deliberate rather than a bare substring test: requiring a
+ * `/` or the end of the string after the word keeps `/collections/cart-bags`
+ * and `/products/admin-chair` out, which a loose match would swallow.
+ */
+const SEGMENT = String.raw`(?:^|/)`;
+const SEGMENT_END = String.raw`(?:/|$|\b)`;
+
 const HOUSEKEEPING_RULES: RegExp[] = [
-  // Transactional and admin areas.
-  /^\*?\/?(cart|carts|checkout|checkouts|orders?|account|my[-_]account|admin|login|logout|register|password|lost[-_]password|customer|wishlist|compare|search)\b/i,
+  // Transactional and admin areas. The optional view/my/shopping prefix is not
+  // decoration: Flipkart disallows `/viewcart`, which is as obviously a cart as
+  // `/cart` is, and without it we warned a major retailer that it was blocking
+  // real content. Deliberately no `bag` — `/bags` is a product category on half
+  // the fashion sites in India, and treating that as housekeeping would hide a
+  // genuine block.
+  new RegExp(
+    `${SEGMENT}\\*?((view|my|shopping)[-_]?)?(cart|carts|basket|checkout|checkouts|orders?|account|my[-_]account|admin|login|logout|register|password|lost[-_]password|customer|wishlist|compare|search)${SEGMENT_END}`,
+    'i',
+  ),
   // Faceted navigation and sort/filter permutations — infinite URL space, no
   // unique content behind any of it.
   /sort_by|filter|\*\+\*|%2b|\?|&|=/i,
@@ -107,7 +182,10 @@ const HOUSEKEEPING_RULES: RegExp[] = [
   // `/api/` in particular is blocked by almost every modern site — flagging it
   // would cost nearly every React, Next.js or Vite site points for doing the
   // correct thing.
-  /^\*?\/?(api|_next|_nuxt|_vercel|_astro|static|assets|build|dist|cgi-bin|node_modules|a\/downloads|sf_|cdn\/|apps|services|recommendations|\.well-known|apple-app-site-association|wp-admin|wp-includes|wp-content|wp-json|xmlrpc)/i,
+  new RegExp(
+    `${SEGMENT}\\*?(api|_next|_nuxt|_vercel|_astro|static|assets|build|dist|cgi-bin|node_modules|a/downloads|sf_|cdn/|apps|services|recommendations|\\.well-known|apple-app-site-association|wp-admin|wp-includes|wp-content|wp-json|xmlrpc)`,
+    'i',
+  ),
   // Shopify's remote-SKU variants: literal character classes in the path.
   /\[a-f0-9\]/i,
   // Numeric store-id prefixed routes, e.g. "/13080907/checkouts".
@@ -166,6 +244,67 @@ interface BotVerdict {
   otherBlocks: RobotsRule[];
 }
 
+/**
+ * One row per crawler: what robots.txt says, overridden by what the server
+ * actually did wherever we asked it.
+ *
+ * The live result outranks the file every time. A rule saying "welcome" means
+ * nothing if the request comes back 403, and that disagreement is the single
+ * most valuable thing this check produces — so the row says which of the two it
+ * is reporting rather than blending them into one verdict.
+ */
+function buildAccessRows(context: ScanContext): AgentAccessRow[] {
+  const { robots } = context;
+
+  /**
+   * Was the server still answering us while the probes ran?
+   *
+   * Ten near-simultaneous requests can trip a rate limiter that four never did,
+   * and every probe after that point comes back 429 — which would read as "this
+   * site blocks ten AI crawlers" when it blocks none of them. The Googlebot
+   * control is sent in the same burst, so if it came back cleanly the server was
+   * still serving and a refusal really is about that crawler. If the control was
+   * refused too, we cannot attribute anything, and the rows fall back to what
+   * robots.txt says rather than inventing a server-side block.
+   */
+  const control = context.botProbes[CONTROL_BOT.agent];
+  const serverWasAnswering = Boolean(control && control.ok);
+
+  return AI_BOTS.map(({ agent, label }) => {
+    const probe = context.botProbes[agent];
+    const liveTested = Boolean(probe && !probe.failure) && serverWasAnswering;
+
+    if (liveTested && (probe.blocked || probe.status === 404)) {
+      return {
+        agent,
+        label,
+        status: 'blocked_server' as const,
+        liveTested: true,
+        detail: `server answered HTTP ${probe.status ?? '—'} to a live request`,
+      };
+    }
+
+    const decision = robots ? isAllowed(robots, agent, '/') : null;
+    if (decision && !decision.allowed) {
+      return {
+        agent,
+        label,
+        status: 'blocked_robots' as const,
+        liveTested: false,
+        detail: decision.rule ? `robots.txt line ${decision.rule.line}: Disallow: ${decision.rule.path}` : 'disallowed in robots.txt',
+      };
+    }
+
+    return {
+      agent,
+      label,
+      status: 'allowed' as const,
+      liveTested,
+      detail: liveTested ? `served HTTP ${probe.status} to a live request` : null,
+    };
+  });
+}
+
 export function checkBotAccess(context: ScanContext): CheckOutcome {
   const { robotsTxt, robots } = context;
 
@@ -173,6 +312,7 @@ export function checkBotAccess(context: ScanContext): CheckOutcome {
     checkId: 'bot_access' as const,
     title: 'AI bot access',
     generatedFixLanguage: 'robots' as const,
+    agentAccess: buildAccessRows(context),
   };
 
   /**
@@ -242,6 +382,35 @@ export function checkBotAccess(context: ScanContext): CheckOutcome {
   // but allowlist the named crawlers, which is a correct setup.
   const probedOk = LIVE_PROBE_BOTS.filter(({ agent }) => context.botProbes[agent]?.ok);
   const serverAllowlistsBots = !homepageServedUs && probedOk.length > 0;
+
+  /**
+   * Say it here too, not only when robots.txt was unreadable.
+   *
+   * This used to live solely inside the robots.txt-failure branch, so a large
+   * retailer with a perfectly readable robots.txt that refused our scanner and
+   * served GPTBot fell straight through to the rules-based verdict below — and
+   * the single most reassuring fact we had learned about it was silently
+   * dropped from the report.
+   */
+  if (serverAllowlistsBots) {
+    return {
+      ...base,
+      status: 'pass',
+      details: `Server refused our scanner (HTTP ${context.homepage.status ?? 'blocked'}) but served ${probedOk
+        .map((bot) => bot.agent)
+        .join(', ')} normally.`,
+      humanExplanation:
+        `Your server turns away visitors it does not recognise — including our scanner — but served your homepage normally when we asked as ${probedOk
+          .map((bot) => bot.label)
+          .join(', ')}. ` +
+        'That is exactly the right configuration: strict by default, open to the crawlers that matter. ' +
+        'The live test is the one that counts here, and you passed it. ' +
+        'Because we were turned away ourselves, several checks below could not run — they have been left out of your score rather than counted against you.',
+      generatedFix: null,
+      generatedFixLanguage: null,
+      generatedFixTarget: null,
+    };
+  }
 
   // Could not reach robots.txt at all — the site was down or blocked us. Say so
   // rather than guessing; Check 6 reports the access problem itself.
@@ -362,19 +531,53 @@ export function checkBotAccess(context: ScanContext): CheckOutcome {
     ? ` Live requests as ${probedOk.map((bot) => bot.agent).join(', ')} were served normally.`
     : '';
 
+  const defects = describeDefects(robots);
+
   return {
     ...base,
     status: 'pass',
-    details: `All ${AI_BOTS.length} AI crawlers can reach the homepage and your ${context.profile.keyPageLabel}.${probeNote}`,
+    details: `All ${AI_BOTS.length} AI crawlers can reach the homepage and your ${context.profile.keyPageLabel}.${probeNote}${defects.detail}`,
     humanExplanation:
       `Your robots.txt file lets every major AI assistant — ChatGPT, Claude, Gemini, Perplexity, Copilot and Amazon's — read your site, including your ${context.profile.keyPageLabel}. ` +
       (probedOk.length
         ? `We also asked your server for a page as ${probedOk.map((bot) => bot.label).join(', ')} and it served ${probedOk.length === 1 ? 'it' : 'them'} normally, so your firewall agrees with your robots.txt — the two disagree more often than owners realise. `
         : '') +
-      'This is the single biggest thing to get right, and you have it right. Nothing to change.',
+      'This is the single biggest thing to get right, and you have it right. Nothing to change.' +
+      defects.explanation,
     generatedFix: null,
     generatedFixLanguage: null,
     generatedFixTarget: null,
+  };
+}
+
+/**
+ * Lines in robots.txt that crawlers silently discard.
+ *
+ * Reported even when everything else passes, because the failure is invisible
+ * from the owner's side: they wrote `Disallow: https://example.com/login/`,
+ * they believe that page is blocked, and it is not. Nothing in their analytics
+ * or their file will ever tell them the rule is dead.
+ *
+ * It never changes the status. An ignored Disallow does not stop an assistant
+ * reading the site, which is what this check scores — it is information the
+ * owner is entitled to, not a fault in their AI readiness.
+ */
+function describeDefects(robots: ScanContext['robots']): { detail: string; explanation: string } {
+  const defects = robots?.defects ?? [];
+  if (!defects.length) return { detail: '', explanation: '' };
+
+  const lines = defects.slice(0, 3).map((defect) => `line ${defect.line} (${defect.raw})`);
+
+  return {
+    detail: ` ${defects.length} robots.txt line(s) are invalid and ignored by crawlers: ${lines.join('; ')}.`,
+    explanation:
+      ` One separate thing worth knowing: ${
+        defects.length === 1 ? 'one line in your robots.txt is' : `${defects.length} lines in your robots.txt are`
+      } written in a way crawlers cannot read, so ${defects.length === 1 ? 'it is' : 'they are'} skipped entirely — ${lines.join('; ')}. ` +
+      'A rule must be a path such as "/login/", not a full web address. ' +
+      `This does not affect your score, and it is not stopping assistants reading you. But if ${
+        defects.length === 1 ? 'that line was' : 'those lines were'
+      } meant to keep something private, ${defects.length === 1 ? 'it is' : 'they are'} not doing it — nothing in your file or your analytics would ever have told you.`,
   };
 }
 

@@ -2,6 +2,7 @@ import { CheckOutcome } from '../../types';
 import { ScanContext } from '../scanContext';
 import { HtmlDocument, typesOf } from '../htmlDocument';
 import { SCHEMA_PROFILES, SchemaField, SchemaProfile } from './schemaProfiles';
+import { clientRenderWarning } from './crawlability';
 
 /**
  * Check 3 — structured data (the heaviest check for every site type).
@@ -84,12 +85,16 @@ export function checkStructuredData(context: ScanContext): CheckOutcome {
     return {
       ...base,
       status: 'fail',
-      details: `No schema.org ${profile.label} markup found on ${readablePages.length} page(s): ${readablePages.map((page) => page.url).join(', ')}.`,
+      details: `No schema.org ${profile.label} markup found on ${readablePages.length} page(s): ${describeAffectedPages(
+        readablePages.map((page) => page.url),
+        context.profile.keyPageLabel,
+      )}.`,
       humanExplanation:
         `Your ${pageNoun} do not include ${profile.label} structured data — the hidden, machine-readable block that states the facts about you in a form a machine can trust. ` +
         'A person reading your page can see all of it; an AI assistant reading the same page often cannot, because it is buried in design markup. ' +
         `This is the single most valuable thing on this report to fix, because ${profile.why}. ` +
-        'Paste the block below into the <head>, filling in the real values.',
+        'Paste the block below into the <head>, filling in the real values.' +
+        clientRenderWarning(context.homepage),
       generatedFix: fix,
       generatedFixTarget: profile.fixTarget,
     };
@@ -119,7 +124,12 @@ export function checkStructuredData(context: ScanContext): CheckOutcome {
   const details = [
     `${profile.label} schema found on ${withSchema.length}/${readablePages.length} page(s) checked.`,
     missingUnion.length ? `Missing fields: ${missingUnion.map((field) => field.key).join(', ')}.` : '',
-    pagesWithout.length ? `No ${profile.label} schema on: ${pagesWithout.map((finding) => finding.page.url).join(', ')}.` : '',
+    pagesWithout.length
+      ? `No ${profile.label} schema on: ${describeAffectedPages(
+          pagesWithout.map((finding) => finding.page.url),
+          context.profile.keyPageLabel,
+        )}.`
+      : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -130,19 +140,38 @@ export function checkStructuredData(context: ScanContext): CheckOutcome {
   // than scoring a shell of a schema as half credit.
   const severelyIncomplete = missingUnion.length >= 3 || pagesWithout.length === readablePages.length;
 
+  /**
+   * Two independent problems, either of which can be absent.
+   *
+   * Building this as one sentence with an optional tail produced "but and
+   * undefined are missing" on a real report: every page carrying schema was
+   * complete, so `labels` was empty, and `joinWords([])` reached past the end
+   * of the array. Assemble the clauses that apply and join those.
+   */
+  const missingClause = !labels.length
+    ? ''
+    : labels.length === 1
+      ? `the ${labels[0]} is missing`
+      : `${joinWords(labels)} are missing`;
+
+  const pagesClause = pagesWithout.length
+    ? `${pagesWithout.length} of the ${readablePages.length} pages we checked have none at all`
+    : '';
+
+  const problem = [missingClause, pagesClause].filter(Boolean).join(', and ');
+
   return {
     ...base,
     status: severelyIncomplete ? 'fail' : 'warning',
     details,
     humanExplanation:
-      `Your ${pageNoun} do include ${profile.label} structured data, but ${labels.length === 1 ? `the ${labels[0]} is` : `${joinWords(labels)} are`} missing` +
-      (pagesWithout.length ? `, and ${pagesWithout.length} of the ${readablePages.length} pages we checked have none at all` : '') +
-      '. ' +
+      `Your ${pageNoun} do include ${profile.label} structured data, but ${problem}. ` +
       criticalFieldNote(missingUnion) +
       (severelyIncomplete
         ? 'With this much missing, an assistant reading your page still cannot answer the basic questions about you — so in practice it behaves as if the data were not there. '
         : 'You are close — filling in the missing fields is a small edit with an outsized effect. ') +
-      'The block below is built from what we could read off your own page; fill in anything marked REPLACE_WITH_ and paste it into the <head>.',
+      'The block below is built from what we could read off your own page; fill in anything marked REPLACE_WITH_ and paste it into the <head>.' +
+      clientRenderWarning(context.homepage),
     generatedFix: fix,
     generatedFixTarget: profile.fixTarget,
   };
@@ -229,7 +258,51 @@ function criticalFieldNote(missing: SchemaField[]): string {
   return '';
 }
 
+/**
+ * The URL shape a page was built from: `/products/blue-shirt` → `/products/*`.
+ *
+ * Two pages sharing a shape were almost certainly rendered by the same
+ * template, which is what turns a list of broken pages into a single cause.
+ */
+function templateOf(url: string): string | null {
+  try {
+    const segments = new URL(url).pathname.split('/').filter(Boolean);
+    if (segments.length < 2) return null;
+    return `/${segments.slice(0, -1).join('/')}/*`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Name the cause, not the casualties.
+ *
+ * Listing four failing URLs produces four tickets, fixed four times, and
+ * reintroduced by the fifth page built from the same template. Saying "four
+ * pages built from /products/*" is one job that also fixes every product added
+ * next month. Only claim it when the pages genuinely share a shape and there
+ * are enough of them for it to be a pattern rather than a coincidence.
+ */
+export function describeAffectedPages(urls: string[], noun: string): string {
+  if (!urls.length) return '';
+  if (urls.length < 3) return urls.join(', ');
+
+  const templates = new Map<string, number>();
+  for (const url of urls) {
+    const template = templateOf(url);
+    if (template) templates.set(template, (templates.get(template) || 0) + 1);
+  }
+
+  const [shape, count] = [...templates.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
+  if (!shape || count < 3 || count < urls.length) return urls.join(', ');
+
+  return `${count} ${noun} built from the same template (${shape}) — one template change fixes all of them, and every page added from it afterwards`;
+}
+
 function joinWords(items: string[]): string {
+  // Guard the empty case explicitly. Reading items[-1] returned undefined and
+  // put the literal word "undefined" into a customer-facing sentence.
+  if (!items.length) return '';
   if (items.length === 1) return items[0];
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;

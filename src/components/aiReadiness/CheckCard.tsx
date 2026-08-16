@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, CheckCircle2, Lock, MinusCircle, XCircle } from 'lucide-react';
 import FixBlock from './FixBlock';
+import AgentAccessTable from './AgentAccessTable';
 import { STATUS_STYLE, type CheckStatus, type ScanCheck } from '../../types/aiReadiness';
 
 const ICON: Record<CheckStatus, React.ReactNode> = {
@@ -53,10 +54,27 @@ export const CheckCard: React.FC<{ check: ScanCheck; variant: 'unlocked' | 'teas
       </header>
 
       {variant === 'unlocked' && check.humanExplanation ? (
-        <p className="mt-4 leading-relaxed text-neutral-300">{check.humanExplanation}</p>
+        /*
+         * Paragraphs, but no separate width cap.
+         *
+         * The reading measure is the card's job, not the paragraph's. Capping
+         * the text at `max-w-prose` inside a wider card left a dead strip down
+         * the right of every card — the text stopped well short of a border it
+         * was clearly meant to meet. The report column is sized so that the
+         * card's own content width already lands in a comfortable range.
+         */
+        <div className="mt-5 space-y-3.5">
+          {toParagraphs(check.humanExplanation).map((paragraph, position) => (
+            <p key={position} className="text-[17px] leading-[1.75] text-neutral-300">
+              {paragraph}
+            </p>
+          ))}
+        </div>
       ) : null}
 
-      {variant === 'teaser' ? <p className="mt-4 leading-relaxed text-neutral-300">{check.details}</p> : null}
+      {variant === 'teaser' ? (
+        <p className="mt-4 text-[17px] leading-[1.75] text-neutral-300">{check.details}</p>
+      ) : null}
 
       {variant === 'locked' ? (
         <p className="flex items-start gap-2 mt-4 text-neutral-400">
@@ -66,6 +84,14 @@ export const CheckCard: React.FC<{ check: ScanCheck; variant: 'unlocked' | 'teas
             : 'Unlock to see what is wrong and why it costs you.'}
         </p>
       ) : null}
+
+      {/*
+        Shown in every variant, including the locked one. This is the evidence
+        behind the verdict rather than advice about it — and a per-crawler table
+        someone can check against their own server logs is the most persuasive
+        thing on the page, so putting it behind the gate would be backwards.
+      */}
+      {check.agentAccess?.length ? <AgentAccessTable rows={check.agentAccess} /> : null}
 
       {variant === 'unlocked' && check.generatedFix ? (
         <FixBlock code={check.generatedFix} language={check.generatedFixLanguage} target={check.generatedFixTarget} />
@@ -97,6 +123,27 @@ export const CheckCard: React.FC<{ check: ScanCheck; variant: 'unlocked' | 'teas
 function formatPoints(check: ScanCheck): string {
   if (check.status === 'skipped') return 'not scored';
   return `${check.pointsAwarded}/${check.pointsPossible} pts`;
+}
+
+/**
+ * Split a long explanation into paragraphs at sentence boundaries.
+ *
+ * Two sentences per paragraph breaks the wall without chopping the argument
+ * into fragments. Short explanations are returned untouched — a single
+ * sentence in its own paragraph gains nothing.
+ */
+function toParagraphs(text: string, perParagraph = 2): string[] {
+  // Split only where punctuation is followed by a space *and* a capital.
+  // Punctuation alone cut "llms.txt lets every assistant…" into a fragment
+  // starting "txt lets…" — the dot in a filename is not a full stop.
+  const sentences = text.trim().split(/(?<=[.!?])\s+(?=["'“(]?[A-Z])/);
+  if (sentences.length <= perParagraph) return [text.trim()];
+
+  const out: string[] = [];
+  for (let index = 0; index < sentences.length; index += perParagraph) {
+    out.push(sentences.slice(index, index + perParagraph).join(' ').trim());
+  }
+  return out.filter(Boolean);
 }
 
 export default CheckCard;

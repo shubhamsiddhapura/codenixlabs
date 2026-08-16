@@ -1,5 +1,5 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
-import { CheckId, CheckStatus, Confidence, FixLanguage, Grade, RenderMode, SiteType } from '../types';
+import { AgentAccessRow, CheckId, CheckStatus, Confidence, FixLanguage, Grade, RenderMode, SiteType } from '../types';
 
 export interface ScanCheckDoc {
   checkId: CheckId;
@@ -12,6 +12,7 @@ export interface ScanCheckDoc {
   generatedFix: string | null;
   generatedFixLanguage: FixLanguage | null;
   generatedFixTarget: string | null;
+  agentAccess?: AgentAccessRow[];
 }
 
 export interface ScanDoc extends Document {
@@ -68,6 +69,23 @@ const checkSchema = new Schema<ScanCheckDoc>(
     generatedFix: { type: String, default: null },
     generatedFixLanguage: { type: String, enum: ['robots', 'json', 'html', 'markdown', null], default: null },
     generatedFixTarget: { type: String, default: null },
+    // Only the bot-access check populates this. Stored so a saved report shows
+    // the same per-crawler evidence the live scan did.
+    agentAccess: {
+      type: [
+        new Schema(
+          {
+            agent: { type: String, required: true },
+            label: { type: String, required: true },
+            status: { type: String, required: true, enum: ['allowed', 'blocked_robots', 'blocked_server'] },
+            liveTested: { type: Boolean, default: false },
+            detail: { type: String, default: null },
+          },
+          { _id: false },
+        ),
+      ],
+      default: undefined,
+    },
   },
   { _id: false },
 );

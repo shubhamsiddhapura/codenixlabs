@@ -11,6 +11,10 @@ import LeadGate from '../components/aiReadiness/LeadGate';
 import AuditPanel from '../components/aiReadiness/AuditPanel';
 import CompareSection from '../components/aiReadiness/CompareSection';
 import ScopePanel from '../components/aiReadiness/ScopePanel';
+import ScanProgress from '../components/aiReadiness/ScanProgress';
+import ScanCounter from '../components/aiReadiness/ScanCounter';
+import RunHistory from '../components/aiReadiness/RunHistory';
+import SampleReport from '../components/aiReadiness/SampleReport';
 
 import { AiReadinessError, compareScan, startScan, unlockScan } from '../services/aiReadinessService';
 import type { ComparisonResult, FullScan, LeadInput, SiteType, TeaserScan } from '../types/aiReadiness';
@@ -178,6 +182,20 @@ const AiReadiness: React.FC = () => {
                   {scanError}
                 </div>
               ) : null}
+
+              {/* Silent until the count is worth showing — see ScanCounter. */}
+              {!scanning ? <ScanCounter className="mt-6" /> : null}
+
+              {/*
+                Named steps rather than a bare spinner. Fifteen seconds behind a
+                spinner reads as broken; the same wait with the work named reads
+                as thorough, and every line is a step the engine really runs.
+              */}
+              {scanning ? (
+                <div className="mt-8">
+                  <ScanProgress url={lastUrl} />
+                </div>
+              ) : null}
             </motion.div>
           </div>
         </div>
@@ -187,7 +205,7 @@ const AiReadiness: React.FC = () => {
       <div ref={resultsRef} className="scroll-mt-28">
         {teaser && !fullScan ? (
           <section className="relative py-12">
-            <div className="container max-w-4xl px-4 mx-auto sm:px-6 lg:px-8">
+            <div className="container max-w-3xl px-4 mx-auto sm:px-6 lg:px-8">
               <ResultHeader
                 domain={teaser.domain}
                 grade={teaser.overallGrade}
@@ -266,6 +284,13 @@ const AiReadiness: React.FC = () => {
       {!teaser && !scanning ? (
         <>
           <Explainer />
+          {/*
+            Between "what we check" and "what we do not": someone has just read
+            the claims, and this is the evidence for them. It also gives the
+            report itself a chance to sell, which it does better than any
+            paragraph about the report.
+          */}
+          <SampleReport />
           <ScopePanel />
         </>
       ) : null}
@@ -301,7 +326,7 @@ const FullReport: React.FC<{
 
   return (
     <section className="relative py-12">
-      <div className="container max-w-4xl px-4 mx-auto sm:px-6 lg:px-8">
+      <div className="container max-w-3xl px-4 mx-auto sm:px-6 lg:px-8">
         <ResultHeader
           domain={scan.domain}
           grade={scan.overallGrade}
@@ -345,6 +370,15 @@ const FullReport: React.FC<{
           at and what we left alone — which is the next question, and the one
           someone otherwise leaves the page still wondering about.
         */}
+        {/*
+          Renders nothing unless this domain has been scanned before, so a
+          first-time visitor never sees an empty history box on the one report
+          they came for.
+        */}
+        <div className="mt-8 empty:hidden">
+          <RunHistory scanId={scan.scanId} />
+        </div>
+
         <div className="mt-8">
           <ScopePanel variant="compact" />
         </div>

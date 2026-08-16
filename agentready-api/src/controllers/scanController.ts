@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Scan, ScanDoc } from '../models/Scan';
 import { Lead } from '../models/Lead';
-import { scanUrl, toFullScan, toGatedScan, toTeaser } from '../services/scanService';
+import { compareRuns, getScanStats, listRuns, scanUrl, toFullScan, toGatedScan, toTeaser } from '../services/scanService';
 import { emailConfigured, sendLeadNotification, sendReportEmail } from '../services/emailService';
 import { buildReportHtml } from '../services/reportHtml';
 import { HttpError } from '../middleware/errorHandler';
@@ -40,6 +40,16 @@ export async function createScan(req: Request, res: Response): Promise<void> {
   const siteType = parseSiteType(req.body?.siteType);
   const { scan, cached } = await scanUrl(url, siteType);
   res.json({ success: true, data: toTeaser(scan, cached) });
+}
+
+/**
+ * GET /api/scan/stats — how much this tool has been used.
+ *
+ * Counts only, nothing about who ran what. Cached server-side because it is
+ * read by every homepage visitor, most of whom never scan anything.
+ */
+export async function getStats(_req: Request, res: Response): Promise<void> {
+  res.json({ success: true, data: await getScanStats() });
 }
 
 /** GET /api/scan/:scanId — verdicts without the explanations or the fixes. */
@@ -109,6 +119,36 @@ export async function unlockScan(req: Request, res: Response): Promise<void> {
     data: toFullScan(scan),
     meta: { emailed, leadId: String(lead._id) },
   });
+}
+
+/**
+ * GET /api/scan/:scanId/history — earlier runs of the same domain.
+ *
+ * Deliberately returns nothing but dates, grades and rule versions. Someone
+ * holding a scan id can already re-scan the domain themselves, so the runs
+ * themselves are not a secret — but there is no reason for this route to carry
+ * findings, explanations or anything about who ran them.
+ */
+export async function getScanHistory(req: Request, res: Response): Promise<void> {
+  const scan = await loadScan(req.params.scanId);
+  const runs = await listRuns(scan.domain, String(scan._id));
+  res.json({ success: true, data: { domain: scan.domain, current: String(scan._id), runs } });
+}
+
+/** GET /api/scan/:scanId/diff/:otherScanId — what moved between two runs. */
+export async function diffScans(req: Request, res: Response): Promise<void> {
+  const { scanId, otherScanId } = req.params;
+  if (!mongoose.isValidObjectId(scanId) || !mongoose.isValidObjectId(otherScanId)) {
+    throw new HttpError(400, 'That comparison link is not valid.');
+  }
+  if (scanId === otherScanId) {
+    throw new HttpError(400, 'That is the same run twice — pick a different one to compare against.');
+  }
+
+  const comparison = await compareRuns(otherScanId, scanId);
+  if (!comparison) throw new HttpError(404, 'We could not find one of those scans. It may have been a while — please run it again.');
+
+  res.json({ success: true, data: comparison });
 }
 
 /** GET /api/scan/:scanId/report — the shareable HTML linked from the email. */

@@ -10,6 +10,49 @@ import { config } from '../config';
  * undoes the point of sending it.
  */
 
+/**
+ * The site's own fonts, with a full fallback chain behind them.
+ *
+ * The webfont link in <head> is honoured by a browser opening the shareable
+ * report and stripped by most email clients — which is why the stack behind
+ * Space Grotesk is a complete one rather than a token `sans-serif`. The report
+ * should look like the site it came from where it can, and like a well-set
+ * document everywhere else.
+ */
+const BODY_FONT = "'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const DISPLAY_FONT = "'Orbitron','Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
+/**
+ * Break a long explanation into paragraphs at sentence boundaries.
+ *
+ * The explanations run to five or six sentences because they have to carry the
+ * finding, the reason it costs something, and what to do about it. Rendered as
+ * one block that is a wall of text nobody finishes reading — which wastes the
+ * part of the report people actually paid an email address for.
+ *
+ * Two sentences per paragraph is enough to break the wall without chopping the
+ * argument into fragments.
+ */
+export function toParagraphs(text: string, perParagraph = 2): string[] {
+  /**
+   * A sentence ends at .!? followed by whitespace and a capital letter.
+   *
+   * Both halves of that matter. Splitting on the punctuation alone cut
+   * "llms.txt lets every major assistant…" into a fragment beginning "txt file
+   * lets…", because the dot inside a filename looked exactly like a full stop.
+   * Requiring the space rules out llms.txt and schema.org; requiring the
+   * capital rules out "e.g. this".
+   */
+  const sentences = text.trim().split(/(?<=[.!?])\s+(?=["'“(]?[A-Z])/);
+  if (sentences.length <= perParagraph) return [text.trim()];
+
+  const out: string[] = [];
+  for (let index = 0; index < sentences.length; index += perParagraph) {
+    out.push(sentences.slice(index, index + perParagraph).join(' ').trim());
+  }
+  return out.filter(Boolean);
+}
+
 const GRADE_COLOURS: Record<string, string> = {
   A: '#059669',
   B: '#65a30d',
@@ -43,22 +86,46 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * A skipped check scores 0/0, which on the page reads as a zero — the opposite
+ * of what it means. It was excluded from the total, not failed.
+ */
+function pointsLabel(check: ScanDoc['checks'][number]): string {
+  if (check.status === 'skipped') return 'not scored';
+  return `${check.pointsAwarded}/${check.pointsPossible} pts`;
+}
+
 function checkBlock(check: ScanDoc['checks'][number]): string {
   const style = STATUS_STYLES[check.status] || STATUS_STYLES.skipped;
 
+  /**
+   * The destination is promoted to a banded step above the code, not a grey
+   * footnote below the heading.
+   *
+   * A block of JSON-LD is worthless to the person holding it until they know
+   * which file it belongs in, and that sentence was previously set smaller and
+   * fainter than the code it explains — the least readable treatment given to
+   * the most actionable line in the report.
+   */
   const fixBlock = check.generatedFix
     ? `
-      <p style="margin:16px 0 4px;font-size:13px;font-weight:600;color:#0f172a;">Copy-paste fix</p>
-      ${
-        check.generatedFixTarget
-          ? `<p style="margin:0 0 8px;font-size:12.5px;color:#64748b;line-height:1.6;"><strong>Where this goes:</strong> ${escapeHtml(
-              check.generatedFixTarget,
-            )}</p>`
-          : ''
-      }
-      <pre style="margin:0;padding:14px;background:#0f172a;color:#e2e8f0;border-radius:8px;font-family:Consolas,Monaco,monospace;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word;overflow-x:auto;">${escapeHtml(
-        check.generatedFix,
-      )}</pre>`
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 0;border:1px solid #e5e7eb;border-radius:10px;">
+        <tr><td style="padding:12px 14px;background:#f8fafc;border-bottom:1px solid #e5e7eb;border-radius:10px 10px 0 0;">
+          <p style="margin:0;font-family:${DISPLAY_FONT};font-size:12px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#0f172a;">Copy this fix</p>
+          ${
+            check.generatedFixTarget
+              ? `<p style="margin:7px 0 0;font-size:14px;line-height:1.6;color:#0f172a;"><strong style="color:#0284c7;">Paste it into:</strong> ${escapeHtml(
+                  check.generatedFixTarget,
+                )}</p>`
+              : ''
+          }
+        </td></tr>
+        <tr><td style="padding:0;">
+          <pre style="margin:0;padding:14px;background:#0f172a;color:#e2e8f0;border-radius:0 0 10px 10px;font-family:Consolas,Monaco,monospace;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;overflow-x:auto;">${escapeHtml(
+            check.generatedFix,
+          )}</pre>
+        </td></tr>
+      </table>`
     : '';
 
   return `
@@ -66,15 +133,20 @@ function checkBlock(check: ScanDoc['checks'][number]): string {
       <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:12px;">
         <tr><td style="padding:20px 22px;">
           <table width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td style="font-size:16px;font-weight:600;color:#0f172a;">${escapeHtml(check.title)}</td>
-            <td align="right" style="white-space:nowrap;">
+            <td style="font-family:${DISPLAY_FONT};font-size:16px;font-weight:600;color:#0f172a;line-height:1.35;">${escapeHtml(check.title)}</td>
+            <td align="right" style="white-space:nowrap;vertical-align:top;">
               <span style="display:inline-block;background:${style.background};color:${style.colour};font-size:11px;font-weight:700;letter-spacing:0.04em;padding:4px 10px;border-radius:999px;">${style.label}</span>
-              <span style="display:inline-block;margin-left:8px;font-size:12px;color:#6b7280;">${check.pointsAwarded}/${check.pointsPossible} pts</span>
+              <span style="display:inline-block;margin-left:8px;font-size:12px;color:#6b7280;">${pointsLabel(check)}</span>
             </td>
           </tr></table>
 
-          <p style="margin:14px 0 0;font-size:14px;line-height:1.65;color:#334155;">${escapeHtml(check.humanExplanation)}</p>
-          <p style="margin:12px 0 0;font-size:12px;line-height:1.55;color:#94a3b8;">${escapeHtml(check.details)}</p>
+          ${toParagraphs(check.humanExplanation)
+            .map(
+              (paragraph) =>
+                `<p style="margin:14px 0 0;font-size:15px;line-height:1.75;color:#334155;">${escapeHtml(paragraph)}</p>`,
+            )
+            .join('')}
+          <p style="margin:14px 0 0;font-size:12.5px;line-height:1.6;color:#94a3b8;">${escapeHtml(check.details)}</p>
           ${fixBlock}
         </td></tr>
       </table>
@@ -121,14 +193,17 @@ export function buildReportHtml(scan: ScanDoc, recipientName?: string): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
 <title>AI Readiness Report — ${escapeHtml(scan.domain)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Orbitron:wght@500;600;700&display=swap" rel="stylesheet">
 </head>
-<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<body style="margin:0;padding:0;background:#f8fafc;font-family:${BODY_FONT};">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 12px;">
 <tr><td align="center">
   <table width="640" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 4px rgba(15,23,42,0.08);">
 
     <tr><td style="background:#0f172a;padding:26px 32px;">
-      <p style="margin:0;color:#ffffff;font-size:19px;font-weight:600;">AI Readiness Report</p>
+      <p style="margin:0;color:#ffffff;font-family:${DISPLAY_FONT};font-size:19px;font-weight:600;letter-spacing:0.01em;">AI Readiness Report</p>
       <p style="margin:6px 0 0;color:#94a3b8;font-size:13px;">${escapeHtml(scan.domain)} &middot; scanned ${scan.scannedAt.toISOString().slice(0, 10)}</p>
     </td></tr>
 
@@ -140,11 +215,11 @@ export function buildReportHtml(scan: ScanDoc, recipientName?: string): string {
       <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 26px;">
         <tr>
           <td width="96" valign="middle">
-            <div style="width:88px;height:88px;border-radius:16px;background:${gradeColour};color:#ffffff;font-size:44px;font-weight:700;line-height:88px;text-align:center;">${scan.overallGrade}</div>
+            <div style="width:88px;height:88px;border-radius:16px;background:${gradeColour};color:#ffffff;font-family:${DISPLAY_FONT};font-size:44px;font-weight:700;line-height:88px;text-align:center;">${scan.overallGrade}</div>
           </td>
           <td valign="middle" style="padding-left:18px;">
-            <p style="margin:0;font-size:15px;font-weight:600;color:#0f172a;">${scan.overallScore}/100</p>
-            <p style="margin:6px 0 0;font-size:14px;color:#475569;line-height:1.6;">${escapeHtml(scan.summary)}</p>
+            <p style="margin:0;font-family:${DISPLAY_FONT};font-size:15px;font-weight:600;color:#0f172a;">${scan.overallScore}/100</p>
+            <p style="margin:6px 0 0;font-size:15px;color:#475569;line-height:1.7;">${escapeHtml(scan.summary)}</p>
           </td>
         </tr>
       </table>

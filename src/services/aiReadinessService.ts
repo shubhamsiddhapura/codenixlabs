@@ -2,6 +2,9 @@ import type {
   ComparisonResult,
   FullScan,
   LeadInput,
+  RunComparison,
+  ScanHistory,
+  ScanStats,
   SiteType,
   TeaserScan,
   UnlockResult,
@@ -95,5 +98,23 @@ export async function compareScan(scanId: string, competitorUrl: string): Promis
     method: 'POST',
     body: JSON.stringify({ competitorUrl }),
   });
+  return data;
+}
+
+/** Earlier runs of the same domain — dates and grades only, no findings. */
+export async function fetchScanHistory(scanId: string): Promise<ScanHistory> {
+  const { data } = await request<ScanHistory>(`/api/scan/${scanId}/history`);
+  return data;
+}
+
+/** What moved between this run and an earlier one. */
+export async function fetchRunComparison(scanId: string, otherScanId: string): Promise<RunComparison> {
+  const { data } = await request<RunComparison>(`/api/scan/${scanId}/diff/${otherScanId}`);
+  return data;
+}
+
+/** Public usage counters. Cached server-side; safe to call on every page load. */
+export async function fetchScanStats(): Promise<ScanStats> {
+  const { data } = await request<ScanStats>('/api/scan/stats');
   return data;
 }

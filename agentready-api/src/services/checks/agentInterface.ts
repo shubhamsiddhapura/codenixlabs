@@ -117,10 +117,19 @@ export function checkAgentInterface(context: ScanContext): CheckOutcome {
         'Plenty of tools will score you down for not having one. We did too, until we checked. ' +
         (published
           ? 'Keeping yours costs nothing and it may matter later if the standard gets adopted.'
-          : 'Adding one takes ten minutes and may pay off if the standard is adopted — but do the checks that are actually costing you visibility first.'),
-      generatedFix: published ? null : fix.body,
-      generatedFixLanguage: published ? null : fix.language,
-      generatedFixTarget: published ? null : fix.target,
+          : 'So we are not giving you a file to create for it. Spend the time on the checks above that are actually costing you visibility — if the standard gets adopted, adding one later is a ten-minute job.'),
+      /**
+       * No generated file here, deliberately.
+       *
+       * We tell the reader in the sentence above that nothing reads llms.txt,
+       * and then used to hand them one to publish anyway. Shipping a fix for a
+       * problem we have just called a placebo undoes the credibility the
+       * paragraph was buying — and a reader who notices it is right to
+       * discount everything else on the page.
+       */
+      generatedFix: null,
+      generatedFixLanguage: null,
+      generatedFixTarget: null,
     };
   }
 

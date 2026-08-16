@@ -1,5 +1,6 @@
 import { CheckId, Confidence, SiteType, SiteTypeVerdict } from '../types';
 import { HtmlDocument, typesOf } from './htmlDocument';
+import { ParsedRobots } from './robotsTxt';
 import { isApexHost, isSameCompany, isSameSite } from '../utils/url';
 
 /**
@@ -223,6 +224,19 @@ const hasPath = (input: DetectionInput, pattern: RegExp): boolean => input.paths
 const countPaths = (input: DetectionInput, pattern: RegExp): number =>
   input.paths.filter((path) => pattern.test(path)).length;
 
+/**
+ * Every response header flattened into one lower-cased string.
+ *
+ * Cheap to build and only used by the platform signals. Header *names* are
+ * included alongside values because the giveaway is often the name alone —
+ * `x-shopid` says Shopify no matter what number follows it.
+ */
+const headerBlob = (input: DetectionInput): string =>
+  Object.entries(input.homepage.headers || {})
+    .map(([name, value]) => `${name}: ${value}`)
+    .join('\n')
+    .toLowerCase();
+
 const hasSchema = (input: DetectionInput, ...types: string[]): boolean =>
   types.some((type) => input.schemaTypes.has(type));
 
@@ -254,7 +268,31 @@ const SIGNALS: Signal[] = [
     evidence: 'product or shop URLs across the site',
     // Three or more, because the pool now includes the sitemap: a content site
     // that links to a single product page should not read as a store.
-    matches: (input) => countPaths(input, /\/(products?|shop|collections|store)\//i) >= 3,
+    // `/dp/ASIN` is Amazon's product shape and appears nowhere else; without it
+    // amazon.in tied with "content" on its own homepage and fell to general.
+    matches: (input) =>
+      countPaths(input, /\/(products?|shop|collections|store)\//i) + countPaths(input, /\/(dp|itm)\/[a-z0-9]{8,}/i) >= 3,
+  },
+  {
+    /**
+     * The storefront a blocked site still admits to.
+     *
+     * Every large Indian retailer we tested refuses our scanner, leaving
+     * classification with a 403 page and no signals at all — so Flipkart was
+     * graded on Organization schema instead of Product. Their robots.txt is
+     * served without complaint and is unmistakably a shop: `/viewcart`,
+     * `/catalog/`, `ajaxaddcart`, and a `Storebot-Google` group.
+     *
+     * Storebot-Google alone is conclusive — it is Google's *shopping* crawler,
+     * and nothing but a store has any reason to name it. The path patterns need
+     * two hits, since one stray `/orders` link could appear anywhere.
+     */
+    siteType: 'ecommerce',
+    points: 4,
+    evidence: 'robots.txt describes a storefront',
+    matches: (input) =>
+      hasPath(input, /^ua:storebot-google$/i) ||
+      countPaths(input, /(view|my|ajax|add)[-_]?cart|add[-_]?to[-_]?cart|\/catalog(ue)?\/|\/wishlist|\/checkout|\/orders?\b/i) >= 2,
   },
   {
     siteType: 'ecommerce',
@@ -277,6 +315,28 @@ const SIGNALS: Signal[] = [
     points: 2,
     evidence: 'built on an ecommerce platform',
     matches: (input) => /shopify|woocommerce|magento|bigcommerce|prestashop|opencart|wix stores|squarespace commerce/.test(input.generator),
+  },
+  {
+    /**
+     * The platform a JavaScript storefront cannot hide.
+     *
+     * A `<meta name="generator">` tag lives in the HTML, so it vanishes on
+     * exactly the sites we struggle with — a client-rendered store sends us an
+     * empty shell and every content signal scores zero. The response headers
+     * arrive regardless: thesouledstore.com answers `Server: Nitrogen`
+     * (Shopify's Hydrogen runtime) with a completely empty body, and Shopify
+     * themes leak `cdn.shopify.com` through `link` preconnect headers.
+     *
+     * Worth three points rather than two because it is harder to fake and
+     * survives the case where nothing else does.
+     */
+    siteType: 'ecommerce',
+    points: 3,
+    evidence: 'served by an ecommerce platform (from response headers)',
+    matches: (input) =>
+      /cdn\.shopify\.com|x-shopid|x-shopify|shopify-|server:\s*nitrogen|\bnitrogen\b|x-magento|magento|bigcommerce|woocommerce|prestashop/i.test(
+        headerBlob(input),
+      ),
   },
 
   // --- local business ---
@@ -480,8 +540,12 @@ export interface SiteTypeScore {
  * many points did each side get, and from which signal", and that was invisible.
  * `npm run classify -- <url>` prints this.
  */
-export function scoreSiteTypes(homepage: HtmlDocument, sitemapUrls: string[] = []): SiteTypeScore[] {
-  const input = buildInput(homepage, sitemapUrls);
+export function scoreSiteTypes(
+  homepage: HtmlDocument,
+  sitemapUrls: string[] = [],
+  robots: ParsedRobots | null = null,
+): SiteTypeScore[] {
+  const input = buildInput(homepage, sitemapUrls, robots);
 
   const scores = new Map<SiteType, number>();
   const evidence = new Map<SiteType, string[]>();
@@ -526,7 +590,38 @@ export function scoreSiteTypes(homepage: HtmlDocument, sitemapUrls: string[] = [
  *
  * So: look outward from the apex, never upward from a subdomain.
  */
-function buildInput(homepage: HtmlDocument, sitemapUrls: string[]): DetectionInput {
+/**
+ * Path-shaped evidence out of robots.txt.
+ *
+ * This is the only structural evidence some sites give us. Every large Indian
+ * retailer we tested refuses our scanner at the homepage, so classification saw
+ * a 403 page — 30 characters, no links, no sitemap — and fell to "general".
+ * Flipkart was then judged on Organization schema instead of Product, which is
+ * the wrong yardstick applied to the wrong entity.
+ *
+ * Their robots.txt, meanwhile, was served to us happily and is full of
+ * `/viewcart`, `/catalog/`, `ajaxaddcart` and a `Storebot-Google` group. That
+ * is a store describing itself.
+ *
+ * Note what this deliberately does *not* do: we also hold a copy of the
+ * homepage fetched as GPTBot, which those servers do answer. Reading that for
+ * content would mean using another crawler's identity to obtain a page we were
+ * refused, and the probe exists to observe treatment, not to route around it.
+ * robots.txt is a file the site chose to hand us.
+ */
+function robotsPathsOf(robots: ParsedRobots | null): string[] {
+  if (!robots) return [];
+  const out: string[] = [];
+  for (const group of robots.groups) {
+    for (const agent of group.userAgents) out.push(`ua:${agent.toLowerCase()}`);
+    for (const rule of group.rules) {
+      if (rule.path) out.push(rule.path.toLowerCase());
+    }
+  }
+  return out.slice(0, 500);
+}
+
+function buildInput(homepage: HtmlDocument, sitemapUrls: string[], robots: ParsedRobots | null = null): DetectionInput {
   const jsonLd = homepage.jsonLd();
   const schemaTypes = new Set(jsonLd.flatMap((node) => typesOf(node)));
 
@@ -555,7 +650,12 @@ function buildInput(homepage: HtmlDocument, sitemapUrls: string[]): DetectionInp
     // evidence there is, and 400 entries of a 5,000-URL sitemap is routinely
     // all category pages with the product URLs further down. Matching regexes
     // over strings is cheap; being wrong about what a site is, is not.
-    paths: [...linkPaths, ...rawHrefs, ...sitemapUrls.slice(0, 3000).map((url) => url.toLowerCase())],
+    paths: [
+      ...linkPaths,
+      ...rawHrefs,
+      ...sitemapUrls.slice(0, 3000).map((url) => url.toLowerCase()),
+      ...robotsPathsOf(robots),
+    ],
     hostname: hostnameOf(homepage.url),
     schemaTypes,
     jsonLd,
@@ -569,8 +669,12 @@ function buildInput(homepage: HtmlDocument, sitemapUrls: string[]): DetectionInp
  */
 const CLASSIFICATION_PRIORITY: SiteType[] = ['ecommerce', 'local_business', 'saas', 'content'];
 
-export function detectSiteType(homepage: HtmlDocument, sitemapUrls: string[] = []): SiteTypeVerdict {
-  const ranked = [...scoreSiteTypes(homepage, sitemapUrls)].sort(
+export function detectSiteType(
+  homepage: HtmlDocument,
+  sitemapUrls: string[] = [],
+  robots: ParsedRobots | null = null,
+): SiteTypeVerdict {
+  const ranked = [...scoreSiteTypes(homepage, sitemapUrls, robots)].sort(
     (a, b) => b.score - a.score || CLASSIFICATION_PRIORITY.indexOf(a.siteType) - CLASSIFICATION_PRIORITY.indexOf(b.siteType),
   );
 
