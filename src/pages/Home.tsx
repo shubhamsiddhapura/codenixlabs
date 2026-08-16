@@ -9,6 +9,8 @@ import HeroSection from '../components/HeroSection';
 import ServiceCard from '../components/ServiceCard';
 import BlogCard from '../components/BlogCard';
 import TestimonialCard, { Testimonial } from '../components/TestimonialCard';
+import AiReadinessBand from '../components/home/AiReadinessBand';
+import WhyCodenix from '../components/home/WhyCodenix';
 import { BlogService } from '../services/blogService';
 import { BlogPost } from '../types/blog';
 
@@ -194,6 +196,9 @@ const Home: React.FC = () => {
       {/* Hero Section */}
       <HeroSection />
 
+      {/* Free AI Readiness scanner — the fastest way to prove value */}
+      <AiReadinessBand />
+
       {/* Services Section */}
       <section className="relative py-20">
         <div className="container px-4 mx-auto sm:px-6 lg:px-8">
@@ -261,20 +266,20 @@ const Home: React.FC = () => {
 
           {/* Portfolio Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-            {/* Website Development */}
+            {/* Appalachian Website */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: 0.1 }}
+              transition={{ duration: 0.5, delay: 0.15 }}
               className="group relative overflow-hidden rounded-2xl aspect-[4/3] cursor-pointer"
             >
               <Link to="/portfolio" className="block w-full h-full">
                 <img
-                  src="/portfolio/websites/ebuddy.png"
-                  alt="eBuddy Social Networking Platform - High-Performance Web Development by Codenix Labs"
+                  src="/portfolio/websites/appalachian.png"
+                  alt="Appalachian - Modern website experience by Codenix Labs"
                   loading="lazy"
-                  className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/60 to-transparent"></div>
                 <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors duration-300"></div>
@@ -283,20 +288,50 @@ const Home: React.FC = () => {
                     <Globe className="text-primary" size={20} />
                     <span className="text-xs font-medium text-primary uppercase tracking-wider">Websites</span>
                   </div>
-                  <h3 className="text-xl font-orbitron font-bold text-white mb-1">eBuddy Platform</h3>
+                  <h3 className="text-xl font-orbitron font-bold text-white mb-1">Appalachian</h3>
                   <p className="text-sm text-neutral-300 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    Social networking platform
+                    Immersive brand storytelling
                   </p>
                 </div>
               </Link>
             </motion.div>
 
-            {/* UI/UX Design */}
+            {/* Postura By Physio Website */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: 0.2 }}
+              className="group relative overflow-hidden rounded-2xl aspect-[4/3] cursor-pointer"
+            >
+              <Link to="/portfolio" className="block w-full h-full">
+                <img
+                  src="/portfolio/websites/posturabyphysio.png"
+                  alt="Postura By Physio - Premium wellness website by Codenix Labs"
+                  loading="lazy"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/60 to-transparent"></div>
+                <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors duration-300"></div>
+                <div className="absolute bottom-0 left-0 right-0 p-6">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Globe className="text-primary" size={20} />
+                    <span className="text-xs font-medium text-primary uppercase tracking-wider">Websites</span>
+                  </div>
+                  <h3 className="text-xl font-orbitron font-bold text-white mb-1">Postura By Physio</h3>
+                  <p className="text-sm text-neutral-300 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    Calm, premium clinic experience
+                  </p>
+                </div>
+              </Link>
+            </motion.div>
+
+            {/* Link N Date UI/UX Showcase */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.25 }}
               className="group relative overflow-hidden rounded-2xl aspect-[4/3] cursor-pointer"
             >
               <Link to="/portfolio" className="block w-full h-full">
@@ -316,36 +351,6 @@ const Home: React.FC = () => {
                   <h3 className="text-xl font-orbitron font-bold text-white mb-1">Link N Date</h3>
                   <p className="text-sm text-neutral-300 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                     Modern dating app interface
-                  </p>
-                </div>
-              </Link>
-            </motion.div>
-
-            {/* Graphic Design */}
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="group relative overflow-hidden rounded-2xl aspect-[4/3] cursor-pointer"
-            >
-              <Link to="/portfolio" className="block w-full h-full">
-                <img
-                  src="/portfolio/graphicDesign/postura_logo/Postura_By_Physio_png.png"
-                  alt="Postura Branding & Logo Design - Creative Graphic Design by Codenix Labs"
-                  loading="lazy"
-                  className="w-full h-full object-contain bg-neutral-900 transition-transform duration-500 group-hover:scale-110"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/60 to-transparent"></div>
-                <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors duration-300"></div>
-                <div className="absolute bottom-0 left-0 right-0 p-6">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Palette className="text-primary" size={20} />
-                    <span className="text-xs font-medium text-primary uppercase tracking-wider">Graphic Design</span>
-                  </div>
-                  <h3 className="text-xl font-orbitron font-bold text-white mb-1">Postura Branding</h3>
-                  <p className="text-sm text-neutral-300 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    Complete brand identity
                   </p>
                 </div>
               </Link>
@@ -506,6 +511,9 @@ const Home: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Why Codenix Labs */}
+      <WhyCodenix />
 
       {/* Testimonials Section */}
       <section className="relative py-20 overflow-hidden">

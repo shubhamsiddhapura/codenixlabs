@@ -5,9 +5,10 @@ import cors from 'cors'
 import blogRoutes from './routes/blog.js'
 import ogImageRoutes from './routes/ogImage.js'
 import Blog from './models/blog.js'
+import { fileURLToPath } from 'url';
 
 const app = express();
-dotenv.config();
+dotenv.config({ path: fileURLToPath(new URL('./.env', import.meta.url)) });
 const PORT = process.env.PORT || 4000;
 
 connectDB();
@@ -16,22 +17,13 @@ app.get('/health', (req, res) => res.status(200).send('OK'));
 
 const allowedOrigins = [
     "https://www.codenixlabs.com",
-    // "http://localhost:3000",
-    // "http://localhost:4000",
-    // "http://localhost:5173",
-    // "localhost:3000",
-    // "localhost:4000",
-    // "localhost:5173"
 ];
 
 app.use(cors({
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) {
             return callback(null, true);
         }
-        
-        // Check if origin is in allowed list or is localhost in development
         if (allowedOrigins.includes(origin) || /localhost/.test(origin) || process.env.NODE_ENV === 'development') {
             callback(null, true);
         } else {
@@ -43,16 +35,15 @@ app.use(cors({
 
 app.use(express.json());
 
-// Minimal production logging
+// Log every request + response status
 app.use((req, res, next) => {
-    if (req.path.includes('/api/blogs/og')) {
-        console.log(`[OG] ${req.path}`);
-    }
+    const start = Date.now();
+    console.log(`[REQ] ${req.method} ${req.path} | origin: ${req.headers.origin || 'none'}`);
+    res.on('finish', () => {
+        console.log(`[RES] ${req.method} ${req.path} → ${res.statusCode} (${Date.now() - start}ms)`);
+    });
     next();
 });
-
-// Note: Crawler detection handled at Vercel edge level via vercel.json rewrites
-// This backend only needs to serve the OG endpoint for crawlers that access it directly
 
 app.use('/api/blogs', blogRoutes);
 app.use('/api/og', ogImageRoutes);
@@ -75,6 +66,15 @@ function escapeHtml(text) {
   };
   return String(text || '').replace(/[&<>"']/g, m => map[m]);
 }
+
+// Global error handler — must be last, after all routes
+app.use((err, req, res, next) => {
+    console.error(`[ERROR] ${req.method} ${req.path} | ${err.message}`);
+    console.error(err.stack);
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.status(err.status || 500).json({ success: false, message: err.message });
+});
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

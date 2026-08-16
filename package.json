@@ -7,7 +7,8 @@
     "dev": "concurrently \"vite\" \"node SERVER/index.js\"",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:all": "concurrently \"vite\" \"node SERVER/index.js\" \"npm --prefix agentready-api run dev:memory\""
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",

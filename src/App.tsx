@@ -21,6 +21,7 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import CookiePolicy from './pages/CookiePolicy';
 import DemoShowcase from './pages/DemoShowcase';
+import AiReadiness from './pages/AiReadiness';
 import { Analytics } from '@vercel/analytics/react';
 
 function App() {
@@ -47,6 +48,7 @@ function App() {
         <Routes location={location} key={location.pathname}>
           <Route path="/" element={<Home />} />
           <Route path="/services" element={<Services />} />
+          <Route path="/ai-readiness" element={<AiReadiness />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />

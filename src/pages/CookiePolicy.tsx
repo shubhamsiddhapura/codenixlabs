@@ -8,27 +8,27 @@ const CookiePolicy: React.FC = () => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.5 }}
-    >
+      
+      transition={{ duration: 0.5 }}>
       {/* Hero Section */}
-      <section className="pt-32 pb-20 relative grid-bg">
+      <section className="relative pt-32 pb-20 grid-bg">
         <div className="absolute inset-0 bg-glow opacity-40"></div>
         
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="container relative z-10 px-4 mx-auto sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto text-center">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
-              className="mb-4 inline-block"
+              className="inline-block mb-4"
             >
-              <div className="bg-primary/20 text-primary rounded-full p-3">
+              <div className="p-3 rounded-full bg-primary/20 text-primary">
                 <Cookie size={32} />
               </div>
             </motion.div>
             
             <motion.h1 
-              className="text-4xl sm:text-5xl md:text-6xl font-orbitron font-bold mb-6 leading-tight"
+              className="mb-6 text-4xl font-bold leading-tight sm:text-5xl md:text-6xl font-orbitron"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.1 }}
@@ -37,7 +37,7 @@ const CookiePolicy: React.FC = () => {
             </motion.h1>
             
             <motion.p 
-              className="text-xl text-neutral-300 mb-4"
+              className="mb-4 text-xl text-neutral-300"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.2 }}
@@ -59,8 +59,8 @@ const CookiePolicy: React.FC = () => {
       </section>
 
       {/* Content Section */}
-      <section className="py-16 relative">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="relative py-16">
+        <div className="container px-4 mx-auto sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto">
             <div className="prose prose-lg prose-invert max-w-none">
               
@@ -70,11 +70,11 @@ const CookiePolicy: React.FC = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5 }}
-                className="glass p-8 rounded-xl mb-8"
+                className="p-8 mb-8 glass rounded-xl"
               >
                 <div className="flex items-center mb-4">
-                  <Cookie className="text-primary mr-3" size={24} />
-                  <h2 className="text-2xl font-orbitron font-bold mb-0">What Are Cookies?</h2>
+                  <Cookie className="mr-3 text-primary" size={24} />
+                  <h2 className="mb-0 text-2xl font-bold font-orbitron">What Are Cookies?</h2>
                 </div>
                 
                 <p>Cookies are small text files that are stored on your computer or mobile device when you visit a website. They are widely used to make websites work more efficiently and to provide information to website owners.</p>
@@ -95,11 +95,11 @@ const CookiePolicy: React.FC = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: 0.1 }}
-                className="glass p-8 rounded-xl mb-8"
+                className="p-8 mb-8 glass rounded-xl"
               >
                 <div className="flex items-center mb-4">
-                  <Settings className="text-primary mr-3" size={24} />
-                  <h2 className="text-2xl font-orbitron font-bold mb-0">Types of Cookies We Use</h2>
+                  <Settings className="mr-3 text-primary" size={24} />
+                  <h2 className="mb-0 text-2xl font-bold font-orbitron">Types of Cookies We Use</h2>
                 </div>
                 
                 <h3>Essential Cookies</h3>
@@ -141,11 +141,11 @@ const CookiePolicy: React.FC = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: 0.2 }}
-                className="glass p-8 rounded-xl mb-8"
+                className="p-8 mb-8 glass rounded-xl"
               >
                 <div className="flex items-center mb-4">
-                  <BarChart3 className="text-primary mr-3" size={24} />
-                  <h2 className="text-2xl font-orbitron font-bold mb-0">Third-Party Cookies</h2>
+                  <BarChart3 className="mr-3 text-primary" size={24} />
+                  <h2 className="mb-0 text-2xl font-bold font-orbitron">Third-Party Cookies</h2>
                 </div>
                 
                 <p>We may use third-party services that set cookies on our website. These services include:</p>
@@ -183,11 +183,11 @@ const CookiePolicy: React.FC = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: 0.3 }}
-                className="glass p-8 rounded-xl mb-8"
+                className="p-8 mb-8 glass rounded-xl"
               >
                 <div className="flex items-center mb-4">
-                  <Shield className="text-primary mr-3" size={24} />
-                  <h2 className="text-2xl font-orbitron font-bold mb-0">Managing Your Cookie Preferences</h2>
+                  <Shield className="mr-3 text-primary" size={24} />
+                  <h2 className="mb-0 text-2xl font-bold font-orbitron">Managing Your Cookie Preferences</h2>
                 </div>
                 
                 <h3>Browser Settings</h3>
@@ -217,9 +217,9 @@ const CookiePolicy: React.FC = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: 0.4 }}
-                className="glass p-8 rounded-xl mb-8"
+                className="p-8 mb-8 glass rounded-xl"
               >
-                <h2 className="text-2xl font-orbitron font-bold mb-4">Cookie Retention</h2>
+                <h2 className="mb-4 text-2xl font-bold font-orbitron">Cookie Retention</h2>
                 
                 <h3>Session Cookies</h3>
                 <p>These cookies are temporary and are deleted when you close your browser.</p>
@@ -239,9 +239,9 @@ const CookiePolicy: React.FC = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: 0.5 }}
-                className="glass p-8 rounded-xl mb-8"
+                className="p-8 mb-8 glass rounded-xl"
               >
-                <h2 className="text-2xl font-orbitron font-bold mb-4">Updates to This Policy</h2>
+                <h2 className="mb-4 text-2xl font-bold font-orbitron">Updates to This Policy</h2>
                 
                 <p>We may update this Cookie Policy from time to time to reflect changes in our practices or for other operational, legal, or regulatory reasons. We will notify you of any material changes by posting the updated policy on our website.</p>
                 
@@ -254,28 +254,28 @@ const CookiePolicy: React.FC = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: 0.6 }}
-                className="glass p-8 rounded-xl"
+                className="p-8 glass rounded-xl"
               >
-                <h2 className="text-2xl font-orbitron font-bold mb-4">Contact Us</h2>
+                <h2 className="mb-4 text-2xl font-bold font-orbitron">Contact Us</h2>
                 
                 <p>If you have any questions about this Cookie Policy or our use of cookies, please contact us:</p>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <div className="grid grid-cols-1 gap-6 mt-6 md:grid-cols-2">
                   <div className="flex items-center">
-                    <Mail className="text-primary mr-3" size={20} />
+                    <Mail className="mr-3 text-primary" size={20} />
                     <div>
-                      <p className="font-medium mb-0">Email</p>
-                      <a href="mailto:codenixlabs@gmail.com" className="text-primary hover:text-white transition-colors">
+                      <p className="mb-0 font-medium">Email</p>
+                      <a href="mailto:codenixlabs@gmail.com" className="transition-colors text-primary hover:text-white">
                         codenixlabs@gmail.com
                       </a>
                     </div>
                   </div>
                   
                   <div className="flex items-center">
-                    <Phone className="text-primary mr-3" size={20} />
+                    <Phone className="mr-3 text-primary" size={20} />
                     <div>
-                      <p className="font-medium mb-0">Phone</p>
-                      <a href="tel:+917405950263" className="text-primary hover:text-white transition-colors">
+                      <p className="mb-0 font-medium">Phone</p>
+                      <a href="tel:+917405950263" className="transition-colors text-primary hover:text-white">
                         +91 7405950263
                       </a>
                     </div>

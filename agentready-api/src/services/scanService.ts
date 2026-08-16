@@ -1,0 +1,394 @@
+import { config } from '../config';
+import { CheckId, CheckStatus, SiteType } from '../types';
+import { Scan, ScanDoc } from '../models/Scan';
+import { runScan } from './scanEngine';
+import { SCORING_VERSION, countBlockers, weightsFor } from './scoring';
+import { normalizeUrl } from '../utils/url';
+
+/**
+ * Persistence and caching around the scan engine.
+ *
+ * The 6-hour cache does double duty: it keeps a casual visitor from re-scanning
+ * the same store on every page refresh, and it stops the tool being used as a
+ * free crawling proxy for someone else's site.
+ */
+
+export interface ScanOutcome {
+  scan: ScanDoc;
+  /** True when this came from the cache rather than a fresh crawl. */
+  cached: boolean;
+}
+
+export async function scanUrl(submittedUrl: string, siteType?: SiteType): Promise<ScanOutcome> {
+  const { domain } = normalizeUrl(submittedUrl);
+
+  const cached = await findCachedScan(domain, siteType);
+  if (cached) return { scan: cached, cached: true };
+
+  const result = await runScan(submittedUrl, { siteType });
+
+  const scan = await Scan.create({
+    domain: result.domain,
+    submittedUrl: result.submittedUrl,
+    scannedAt: new Date(),
+    siteType: result.siteType,
+    siteTypeConfidence: result.siteTypeConfidence,
+    siteTypeEvidence: result.siteTypeEvidence,
+    siteTypeOverridden: result.siteTypeOverridden,
+    overallScore: result.overallScore,
+    overallGrade: result.overallGrade,
+    summary: result.summary,
+    checks: result.checks,
+    pagesScanned: result.pagesScanned,
+    pagesDiscovered: result.pagesDiscovered,
+    renderMode: result.renderMode,
+    scanDurationMs: result.scanDurationMs,
+    jsRenderWarning: result.jsRenderWarning,
+    partial: result.partial,
+    scoringVersion: result.scoringVersion,
+    comparisonScanId: null,
+    unlocked: false,
+  });
+
+  return { scan, cached: false };
+}
+
+async function findCachedScan(domain: string, siteType?: SiteType): Promise<ScanDoc | null> {
+  const cutoff = new Date(Date.now() - config.scanner.cacheHours * 60 * 60 * 1000);
+
+  const query: Record<string, unknown> = {
+    domain,
+    scannedAt: { $gte: cutoff },
+    // A partial scan is not worth serving for six hours — the next visitor
+    // deserves a real attempt, so only complete scans are cacheable.
+    partial: false,
+    // Scores are only comparable within one version of the rules, so a scan
+    // made under older weights must not be served as if it were current.
+    scoringVersion: SCORING_VERSION,
+  };
+
+  // A detected scan and an overridden one are different judgements of the same
+  // site, so neither may be served in place of the other. Without this, someone
+  // pasting a URL cold could be handed a stranger's override — and read a
+  // report that opens "you told us this is a SaaS product" when they said no
+  // such thing.
+  if (siteType) query.siteType = siteType;
+  else query.siteTypeOverridden = false;
+
+  return Scan.findOne(query).sort({ scannedAt: -1 }).exec();
+}
+
+// --- Public counters ------------------------------------------------------
+
+export interface ScanStats {
+  /** Every scan ever run, including repeats of the same domain. */
+  totalScans: number;
+  /** Distinct domains — the more honest "how many sites have been checked". */
+  sitesChecked: number;
+}
+
+/**
+ * Cached for a minute.
+ *
+ * This is read on every homepage load by visitors who are not scanning
+ * anything, so it must not put a `countDocuments` and a `distinct` on the
+ * database each time. A counter that is up to sixty seconds stale is
+ * indistinguishable from a live one to the person reading it.
+ */
+let statsCache: { value: ScanStats; expiresAt: number } | null = null;
+const STATS_TTL_MS = 60_000;
+
+export async function getScanStats(): Promise<ScanStats> {
+  if (statsCache && statsCache.expiresAt > Date.now()) return statsCache.value;
+
+  const [totalScans, domains] = await Promise.all([Scan.estimatedDocumentCount(), Scan.distinct('domain')]);
+
+  const value: ScanStats = { totalScans, sitesChecked: domains.length };
+  statsCache = { value, expiresAt: Date.now() + STATS_TTL_MS };
+  return value;
+}
+
+// --- History and run comparison -------------------------------------------
+//
+// Nothing new is measured here. Every scan has always been stored with its
+// timestamp and the version of the rules that produced it; this reads back what
+// is already there.
+//
+// The value is in the one question a single scan can never answer: *when did
+// this break?* A theme update or a new security plugin can shut AI crawlers out
+// on a Tuesday, and nothing tells the owner — the site still looks fine, and
+// crawlers do not file complaints. Two runs side by side is how that surfaces
+// in days instead of at the next quarterly review.
+
+/** How many past runs of a domain we will show. */
+const HISTORY_LIMIT = 12;
+
+export interface RunSummary {
+  scanId: string;
+  scannedAt: Date;
+  overallGrade: string;
+  overallScore: number;
+  siteType: SiteType;
+  scoringVersion: string;
+  partial: boolean;
+}
+
+const toRunSummary = (scan: ScanDoc): RunSummary => ({
+  scanId: String(scan._id),
+  scannedAt: scan.scannedAt,
+  overallGrade: scan.overallGrade,
+  overallScore: scan.overallScore,
+  siteType: scan.siteType,
+  scoringVersion: scan.scoringVersion || 'unknown',
+  partial: scan.partial,
+});
+
+/** Past runs of the same domain, newest first, excluding the one in hand. */
+export async function listRuns(domain: string, excludeScanId?: string): Promise<RunSummary[]> {
+  const runs = await Scan.find({ domain }).sort({ scannedAt: -1 }).limit(HISTORY_LIMIT + 1).exec();
+  return runs.filter((run) => String(run._id) !== excludeScanId).slice(0, HISTORY_LIMIT).map(toRunSummary);
+}
+
+export type CheckChange = 'improved' | 'regressed' | 'unchanged' | 'appeared' | 'disappeared';
+
+export interface CheckDiff {
+  checkId: CheckId;
+  title: string;
+  before: { status: CheckStatus; pointsAwarded: number; pointsPossible: number } | null;
+  after: { status: CheckStatus; pointsAwarded: number; pointsPossible: number } | null;
+  change: CheckChange;
+}
+
+/**
+ * Rank a status so a move between two of them has a direction.
+ *
+ * `skipped` sits deliberately outside this order rather than at the bottom. It
+ * means "we could not look", which is not a worse result than a failure — it is
+ * a different kind of statement, and calling a fail-to-skipped move an
+ * improvement would be a lie about progress the site has not made.
+ */
+const STATUS_RANK: Record<CheckStatus, number> = { fail: 0, warning: 1, pass: 2, skipped: -1 };
+
+function changeOf(before: CheckStatus | null, after: CheckStatus | null): CheckChange {
+  if (!before) return 'appeared';
+  if (!after) return 'disappeared';
+  if (before === after) return 'unchanged';
+  if (before === 'skipped' || after === 'skipped') return 'unchanged';
+  return STATUS_RANK[after] > STATUS_RANK[before] ? 'improved' : 'regressed';
+}
+
+export interface RunComparison {
+  domain: string;
+  before: RunSummary;
+  after: RunSummary;
+  /**
+   * False when the two runs were produced by different rules or judged as
+   * different kinds of site.
+   *
+   * This is the honest half of the feature. A score is only meaningful inside
+   * one version of the weights — we have changed them five times — so showing a
+   * confident "+12" across a version boundary would be inventing progress out
+   * of our own edits. Per-check verdicts still survive the comparison and are
+   * shown either way; only the number is withheld.
+   */
+  comparable: boolean;
+  incomparableReason: string | null;
+  scoreDelta: number | null;
+  checks: CheckDiff[];
+}
+
+export async function compareRuns(beforeId: string, afterId: string): Promise<RunComparison | null> {
+  const [a, b] = await Promise.all([Scan.findById(beforeId).exec(), Scan.findById(afterId).exec()]);
+  if (!a || !b) return null;
+
+  // Order by time rather than trusting the caller, so "before" always means
+  // earlier no matter which way round the two ids arrived.
+  const [before, after] = a.scannedAt <= b.scannedAt ? [a, b] : [b, a];
+
+  const sameVersion = before.scoringVersion === after.scoringVersion;
+  const sameType = before.siteType === after.siteType;
+
+  const incomparableReason = !sameVersion
+    ? `These runs were scored by different rule versions (${before.scoringVersion || 'unknown'} then ${
+        after.scoringVersion || 'unknown'
+      }), so the change in score reflects our updated weights as well as your site. The per-check results below are still directly comparable.`
+    : !sameType
+      ? `The first run was judged as a ${before.siteType.replace('_', ' ')} and the second as a ${after.siteType.replace(
+          '_',
+          ' ',
+        )}, which means different checks carried different weight. Compare the individual results rather than the score.`
+      : null;
+
+  const comparable = !incomparableReason;
+
+  const ids = [...new Set([...before.checks.map((c) => c.checkId), ...after.checks.map((c) => c.checkId)])];
+  const checks: CheckDiff[] = ids.map((checkId) => {
+    const from = before.checks.find((c) => c.checkId === checkId) || null;
+    const to = after.checks.find((c) => c.checkId === checkId) || null;
+    return {
+      checkId,
+      title: (to || from)!.title,
+      before: from ? { status: from.status, pointsAwarded: from.pointsAwarded, pointsPossible: from.pointsPossible } : null,
+      after: to ? { status: to.status, pointsAwarded: to.pointsAwarded, pointsPossible: to.pointsPossible } : null,
+      change: changeOf(from?.status ?? null, to?.status ?? null),
+    };
+  });
+
+  // Worst news first: a regression is the reason someone opened this.
+  const order: Record<CheckChange, number> = { regressed: 0, improved: 1, appeared: 2, disappeared: 3, unchanged: 4 };
+  checks.sort((x, y) => order[x.change] - order[y.change]);
+
+  return {
+    domain: after.domain,
+    before: toRunSummary(before),
+    after: toRunSummary(after),
+    comparable,
+    incomparableReason,
+    scoreDelta: comparable ? after.overallScore - before.overallScore : null,
+    checks,
+  };
+}
+
+// --- Response shaping -----------------------------------------------------
+//
+// Three views of the same scan. The gate in spec section 2 is only real if the
+// locked fields never leave the server, so the stripping happens here rather
+// than in the client.
+
+const TEASER_CHECK_COUNT = 2;
+
+/**
+ * The facts a reader needs to judge whether to believe the number: which rules
+ * produced it, what each check was worth, how much of the site was looked at,
+ * and how many of the failures are matters of fact rather than of weighting.
+ *
+ * Shipped with the gated response too. Withholding the methodology behind a
+ * score would undercut the one thing that makes it trustworthy.
+ */
+function auditTrail(scan: ScanDoc): Record<string, unknown> {
+  return {
+    scoringVersion: scan.scoringVersion || 'unknown',
+    weights: weightsFor(scan.siteType),
+    blockingIssues: countBlockers(scan.checks),
+    pagesChecked: scan.pagesScanned.length,
+    pagesDiscovered: Math.max(scan.pagesDiscovered, scan.pagesScanned.length - 1),
+    renderMode: scan.renderMode,
+    siteTypeOverridden: scan.siteTypeOverridden,
+    method: 'Static HTML only — no JavaScript is executed. Checks that could not be verified are excluded from the score rather than counted as zero.',
+  };
+}
+
+export function toFullScan(scan: ScanDoc): Record<string, unknown> {
+  return {
+    scanId: String(scan._id),
+    domain: scan.domain,
+    submittedUrl: scan.submittedUrl,
+    scannedAt: scan.scannedAt,
+    siteType: scan.siteType,
+    siteTypeConfidence: scan.siteTypeConfidence,
+    siteTypeEvidence: scan.siteTypeEvidence,
+    overallScore: scan.overallScore,
+    overallGrade: scan.overallGrade,
+    summary: scan.summary,
+    checks: scan.checks.map((check) => ({
+      checkId: check.checkId,
+      title: check.title,
+      status: check.status,
+      pointsAwarded: check.pointsAwarded,
+      pointsPossible: check.pointsPossible,
+      details: check.details,
+      humanExplanation: check.humanExplanation,
+      generatedFix: check.generatedFix,
+      generatedFixLanguage: check.generatedFixLanguage,
+      generatedFixTarget: check.generatedFixTarget,
+      agentAccess: check.agentAccess,
+      locked: false,
+    })),
+    pagesScanned: scan.pagesScanned,
+    scanDurationMs: scan.scanDurationMs,
+    jsRenderWarning: scan.jsRenderWarning,
+    partial: scan.partial,
+    audit: auditTrail(scan),
+    comparisonScanId: scan.comparisonScanId ? String(scan.comparisonScanId) : null,
+    unlocked: true,
+  };
+}
+
+/** Every check and its verdict, but no explanations and no generated fixes. */
+export function toGatedScan(scan: ScanDoc): Record<string, unknown> {
+  return {
+    scanId: String(scan._id),
+    domain: scan.domain,
+    submittedUrl: scan.submittedUrl,
+    scannedAt: scan.scannedAt,
+    siteType: scan.siteType,
+    siteTypeConfidence: scan.siteTypeConfidence,
+    siteTypeEvidence: scan.siteTypeEvidence,
+    overallScore: scan.overallScore,
+    overallGrade: scan.overallGrade,
+    summary: scan.summary,
+    checks: scan.checks.map((check) => ({
+      checkId: check.checkId,
+      title: check.title,
+      status: check.status,
+      pointsAwarded: check.pointsAwarded,
+      pointsPossible: check.pointsPossible,
+      details: check.details,
+      humanExplanation: null,
+      generatedFix: null,
+      generatedFixLanguage: check.generatedFixLanguage,
+      generatedFixTarget: null,
+      // Factual, not advisory: this is the evidence behind the verdict, so it
+      // stays visible before the gate. Withholding it would make the one
+      // checkable claim in the report unverifiable.
+      agentAccess: check.agentAccess,
+      locked: true,
+    })),
+    pagesScanned: scan.pagesScanned,
+    scanDurationMs: scan.scanDurationMs,
+    jsRenderWarning: scan.jsRenderWarning,
+    partial: scan.partial,
+    audit: auditTrail(scan),
+    comparisonScanId: scan.comparisonScanId ? String(scan.comparisonScanId) : null,
+    unlocked: false,
+    fixesAvailable: countFixes(scan),
+  };
+}
+
+/** Grade, summary and the first two checks — what a visitor sees for free. */
+export function toTeaser(scan: ScanDoc, cached: boolean): Record<string, unknown> {
+  return {
+    scanId: String(scan._id),
+    domain: scan.domain,
+    // Shown in the teaser: "we scanned this as an online store" is the first
+    // thing a visitor sanity-checks, and getting it visibly wrong is better
+    // than getting it invisibly wrong.
+    siteType: scan.siteType,
+    siteTypeConfidence: scan.siteTypeConfidence,
+    siteTypeOverridden: scan.siteTypeOverridden,
+    audit: auditTrail(scan),
+    overallGrade: scan.overallGrade,
+    overallScore: scan.overallScore,
+    summary: scan.summary,
+    teaserChecks: scan.checks.slice(0, TEASER_CHECK_COUNT).map((check) => ({
+      checkId: check.checkId,
+      title: check.title,
+      status: check.status,
+      details: check.details,
+      agentAccess: check.agentAccess,
+      locked: false,
+    })),
+    lockedChecks: Math.max(0, scan.checks.length - TEASER_CHECK_COUNT),
+    // Named in the teaser on purpose: "we generated the code to fix this" is
+    // the strongest reason a visitor has to hand over an email (spec 3a).
+    fixesAvailable: countFixes(scan),
+    jsRenderWarning: scan.jsRenderWarning,
+    partial: scan.partial,
+    scanDurationMs: scan.scanDurationMs,
+    cached,
+  };
+}
+
+export function countFixes(scan: ScanDoc): number {
+  return scan.checks.filter((check) => Boolean(check.generatedFix)).length;
+}

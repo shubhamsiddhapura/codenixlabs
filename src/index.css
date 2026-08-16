@@ -14,8 +14,26 @@ html {
 
 body {
   @apply bg-background font-spaceGrotesk text-white antialiased overflow-x-hidden;
-  cursor: none;
   overflow-x: hidden;
+}
+
+/*
+ * The native cursor is hidden only once Cursor.tsx has confirmed it is running
+ * on a fine pointer and added this class. Hiding it unconditionally from CSS
+ * meant any device the component bailed on — and any moment before React
+ * mounted — had no pointer at all.
+ */
+html.has-custom-cursor body {
+  cursor: none;
+}
+
+/*
+ * Text entry keeps the real caret. A floating dot cannot show where a click
+ * will land between two characters, and losing the I-beam makes every form on
+ * the site feel broken.
+ */
+html.has-custom-cursor :is(input, textarea, select, [contenteditable='true']) {
+  cursor: auto;
 }
 
 ::-webkit-scrollbar {
@@ -36,12 +54,25 @@ body {
   scrollbar-color: theme('colors.primary') theme('colors.background');
 }
 
+/*
+ * White, not brand purple. Under `difference` the dot paints the inverse of
+ * whatever is behind it, and a purple dot crossing a primary-purple button
+ * inverted to pure black — invisible against this background. White has no
+ * such collision.
+ *
+ * Position, centring and scale are owned entirely by GSAP. A `transform` here
+ * (or in a transition) fights the per-frame writes and drags the dot behind
+ * the pointer.
+ */
 .custom-cursor {
   width: var(--cursor-size);
   height: var(--cursor-size);
-  @apply rounded-full fixed pointer-events-none mix-blend-difference z-50;
-  transform: translate(-50%, -50%);
-  transition: transform 0.2s, width 0.2s, height 0.2s;
+  background-color: #fff;
+  top: 0;
+  left: 0;
+  will-change: transform;
+  @apply rounded-full fixed pointer-events-none mix-blend-difference;
+  z-index: 9999;
 }
 
 /* Glass effect */
