@@ -20,6 +20,19 @@ export const config = {
 
   mongoUri: process.env.MONGODB_URI || '',
 
+  /**
+   * Where the emailed report sends someone who wants help.
+   *
+   * Configurable rather than written into the HTML: the number and the contact
+   * page are the two things most likely to change, and hunting for them inside
+   * a template is how a report ends up pointing at a disconnected line.
+   */
+  contact: {
+    /** Digits only — wa.me rejects spaces, plus signs and dashes. */
+    whatsapp: (process.env.CONTACT_WHATSAPP || '918488080162').replace(/\D/g, ''),
+    url: process.env.CONTACT_URL || 'https://www.codenixlabs.com/contact',
+  },
+
   email: {
     apiKey: process.env.RESEND_API_KEY || '',
     // from: process.env.RESEND_FROM_EMAIL || 'noreply@codenixlabs.com',
