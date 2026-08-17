@@ -60,16 +60,17 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
   const homepage = new HtmlDocument(await fetchWithHttpFallback(href, deadline));
 
   /**
-   * Stop before anything else if there is no website here.
+   * Stop before anything else if there is no website here to grade.
    *
    * Checked immediately after the homepage and before any other request,
    * because everything downstream — sampling pages, probing crawlers, judging
-   * schema — is meaningless against a parking page, and running it produces a
-   * confident grade for a domain nobody has built. Returning early also spares
-   * the ~20 requests.
+   * schema — is meaningless without a page, and running it produces a confident
+   * grade for a domain nobody has built. Returning early also spares the ~20
+   * requests.
    */
-  if (looksParked(homepage)) {
-    return notAWebsite(submittedUrl, domain, homepage, startedAt);
+  const missing = whyNoWebsite(homepage);
+  if (missing) {
+    return noWebsiteResult(submittedUrl, domain, homepage, startedAt, missing);
   }
 
   const robotsTxt = await fetchUrl(`${origin}/robots.txt`, deadline);
@@ -197,7 +198,7 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
     // A site with no discoverable subpages gets a complete, cacheable scan;
     // only a timed-out one is worth re-running.
     partial: structured.timedOut,
-    parked: false,
+    noWebsite: false,
     scoringVersion: SCORING_VERSION,
   };
 }
@@ -270,25 +271,117 @@ function titleFor(checkId: CheckId, siteType: SiteType): string {
   return 'Crawlability & response health';
 }
 
+type NoWebsiteReason = 'parked' | 'dns' | 'unreachable' | 'timeout' | 'ssl' | 'redirect_loop';
+
 /**
- * The result for a domain that has no website on it.
+ * Is there anything here to grade at all?
+ *
+ * Two shapes of nothing, and the first fix only caught one of them. A parked
+ * domain answers 200 with a placeholder; an unregistered one does not answer at
+ * all. shubhtanna.com does not resolve — no DNS record anywhere — and we gave it
+ * F, 35 out of 100, with a lead-capture form under it. That is a confident
+ * judgement about a website that has never existed.
+ *
+ * The general rule is simply: if no page ever reached us, there is nothing to
+ * have an opinion about. Every content check would be skipped anyway, so the
+ * only score left comes from the handful that pass trivially — which is exactly
+ * how a domain that is not registered scored 35.
+ */
+export function whyNoWebsite(homepage: HtmlDocument): NoWebsiteReason | null {
+  if (looksParked(homepage)) return 'parked';
+
+  switch (homepage.failure) {
+    case 'dns':
+      return 'dns';
+    case 'connection_refused':
+    case 'network':
+      return 'unreachable';
+    case 'timeout':
+    case 'deadline_exceeded':
+      return 'timeout';
+    case 'ssl':
+      return 'ssl';
+    case 'redirect_loop':
+      return 'redirect_loop';
+    default:
+      return null;
+  }
+}
+
+/**
+ * What the reader is told, per cause.
+ *
+ * Each one says what we observed and what it means, because "we could not
+ * check your site" is useless on its own — an expired certificate, a domain
+ * that was never pointed anywhere and a server that is merely slow are three
+ * completely different problems with three different owners.
+ */
+function explainNoWebsite(domain: string, reason: NoWebsiteReason): string {
+  switch (reason) {
+    case 'parked':
+      return (
+        `${domain} does not appear to have a website on it yet. The address answers, but it returns an almost empty page ` +
+        'that forwards visitors to a domain-parking holder rather than serving any content. ' +
+        'There is nothing here for an AI assistant — or for us — to read, so we have not given it a score.'
+      );
+    case 'dns':
+      return (
+        `${domain} does not exist as far as the internet is concerned — there is no DNS record for it at all, so nothing ` +
+        'can connect to it, including us and every AI assistant. Check the spelling; if it is right, the domain is either ' +
+        'unregistered or has never been pointed at a server. There is nothing to score until it is.'
+      );
+    case 'unreachable':
+      return (
+        `Nothing answered at ${domain}. The address is known, but no server accepted the connection — usually a site that ` +
+        'is switched off, between hosts, or pointed at a server that is no longer running. Until it responds there is ' +
+        'nothing for us to look at.'
+      );
+    case 'timeout':
+      return (
+        `${domain} did not respond in time. That can mean the site is down, or simply very slow — which matters in its own ` +
+        'right, because assistants work to a deadline and drop sources that arrive late. Try again in a few minutes: if it ' +
+        'answers then, we will give you a real report.'
+      );
+    case 'ssl':
+      return (
+        `${domain} has a broken or expired security certificate, so nothing could load it — not a browser, not us, and not ` +
+        'an AI assistant. This is worth fixing today whatever else is true of the site, because visitors are seeing a ' +
+        'security warning instead of your homepage. Your hosting provider can renew it.'
+      );
+    case 'redirect_loop':
+      return (
+        `${domain} sends visitors round in a redirect loop — each address forwards to another that forwards back, so no ` +
+        'page is ever delivered. Browsers and AI crawlers both give up at that point. It is usually a misconfigured www ' +
+        'or https redirect rule, and until it is untangled there is no page here to read.'
+      );
+  }
+}
+
+/**
+ * The result for a domain that has no website to grade.
  *
  * Every check is `skipped`, so nothing is scored out of anything and no letter
- * grade is implied. `parked` is what the report reads to replace the whole
+ * grade is implied. `noWebsite` is what the report reads to replace the whole
  * score panel with an explanation — a D would say "your website has problems"
  * and an F would say "your website is terrible", when the truth is that there
  * is no website to have an opinion about.
  */
-function notAWebsite(submittedUrl: string, domain: string, homepage: HtmlDocument, startedAt: number): ScanResult {
+function noWebsiteResult(
+  submittedUrl: string,
+  domain: string,
+  homepage: HtmlDocument,
+  startedAt: number,
+  reason: NoWebsiteReason,
+): ScanResult {
   const checks: CheckResult[] = CHECK_ORDER.map((checkId) =>
     scoreCheck(
       {
         checkId,
         title: titleFor(checkId, 'general'),
         status: 'skipped',
-        details: 'Not checked — this domain does not serve a website.',
+        details: 'Not checked — no website could be read at this address.',
         humanExplanation:
-          'There is nothing on this domain for us to check yet, so we have not scored it.',
+          'There is nothing at this address for us to check yet, so we have not scored it.',
         generatedFix: null,
         generatedFixLanguage: null,
         generatedFixTarget: null,
@@ -302,14 +395,11 @@ function notAWebsite(submittedUrl: string, domain: string, homepage: HtmlDocumen
     submittedUrl,
     siteType: 'general',
     siteTypeConfidence: 'low',
-    siteTypeEvidence: ['no website found on this domain'],
+    siteTypeEvidence: ['no website could be read at this address'],
     siteTypeOverridden: false,
     overallScore: 0,
     overallGrade: 'F',
-    summary:
-      `${domain} does not appear to have a website on it yet. The address answers, but it returns an almost empty page that ` +
-      'forwards visitors to a domain-parking holder rather than serving any content. ' +
-      'There is nothing here for an AI assistant — or for us — to read, so we have not given it a score.',
+    summary: explainNoWebsite(domain, reason),
     checks,
     pagesScanned: [homepage.url],
     pagesDiscovered: 0,
@@ -317,7 +407,7 @@ function notAWebsite(submittedUrl: string, domain: string, homepage: HtmlDocumen
     scanDurationMs: Date.now() - startedAt,
     jsRenderWarning: false,
     partial: false,
-    parked: true,
+    noWebsite: true,
     scoringVersion: SCORING_VERSION,
   };
 }

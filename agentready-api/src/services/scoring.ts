@@ -25,7 +25,7 @@ export const TOTAL_POINTS = 100;
  * objective, but it makes them fixed, comparable over time, and visibly changed
  * when they change. A before/after score is only meaningful within one version.
  */
-export const SCORING_VERSION = '1.6.0';
+export const SCORING_VERSION = '1.6.1';
 
 /**
  * Checks whose failure is not a matter of opinion.

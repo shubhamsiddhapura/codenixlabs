@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, History, Loader2, Minus, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowRight, Globe2, History, Loader2, Minus, TrendingDown, TrendingUp } from 'lucide-react';
 import { fetchRunComparison, fetchScanHistory } from '../../services/aiReadinessService';
 import { GRADE_COLOUR, STATUS_STYLE, type CheckChange, type RunComparison, type RunSummary } from '../../types/aiReadiness';
 
@@ -81,30 +81,52 @@ export const RunHistory: React.FC<{ scanId: string }> = ({ scanId }) => {
             key={run.scanId}
             className="flex flex-wrap items-center gap-3 px-4 py-3 border rounded-xl border-white/10 bg-white/[0.02]"
           >
-            <span
-              className="flex items-center justify-center flex-shrink-0 text-sm font-bold rounded-lg h-9 w-9"
-              style={{ backgroundColor: `${GRADE_COLOUR[run.overallGrade]}22`, color: GRADE_COLOUR[run.overallGrade] }}
-            >
-              {run.overallGrade}
-            </span>
+            {/*
+              A run that found no website is stored as grade F, score 0, because
+              the columns have to hold something. Rendering that as a red F would
+              tell someone whose site was down for ten minutes that it scored
+              zero — a verdict the scan deliberately refused to give. These rows
+              say what actually happened, and offer no comparison, because there
+              is nothing in them to compare.
+            */}
+            {run.noWebsite ? (
+              <>
+                <span className="flex items-center justify-center flex-shrink-0 rounded-lg h-9 w-9 bg-white/5 text-neutral-500">
+                  <Globe2 size={17} aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-white">{formatDate(run.scannedAt)}</span>
+                  <span className="block text-xs text-neutral-500">No site reachable · not scored</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <span
+                  className="flex items-center justify-center flex-shrink-0 text-sm font-bold rounded-lg h-9 w-9"
+                  style={{ backgroundColor: `${GRADE_COLOUR[run.overallGrade]}22`, color: GRADE_COLOUR[run.overallGrade] }}
+                >
+                  {run.overallGrade}
+                </span>
 
-            <span className="min-w-0">
-              <span className="block text-sm font-medium text-white">{formatDate(run.scannedAt)}</span>
-              <span className="block text-xs text-neutral-500">
-                {run.overallScore}/100 · rules v{run.scoringVersion}
-                {run.partial ? ' · partial scan' : ''}
-              </span>
-            </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-white">{formatDate(run.scannedAt)}</span>
+                  <span className="block text-xs text-neutral-500">
+                    {run.overallScore}/100 · rules v{run.scoringVersion}
+                    {run.partial ? ' · partial scan' : ''}
+                  </span>
+                </span>
 
-            <button
-              type="button"
-              onClick={() => void compare(run.scanId)}
-              disabled={busy}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 ml-auto text-xs font-semibold transition-colors border rounded-lg border-white/15 text-neutral-200 hover:bg-white/10 disabled:opacity-50"
-            >
-              {busy ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : null}
-              Compare with now
-            </button>
+                <button
+                  type="button"
+                  onClick={() => void compare(run.scanId)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 ml-auto text-xs font-semibold transition-colors border rounded-lg border-white/15 text-neutral-200 hover:bg-white/10 disabled:opacity-50"
+                >
+                  {busy ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : null}
+                  Compare with now
+                </button>
+              </>
+            )}
           </li>
         ))}
       </ul>
@@ -178,11 +200,18 @@ const ComparisonTable: React.FC<{ comparison: RunComparison }> = ({ comparison }
             );
           })}
         </ul>
-      ) : (
+      ) : comparison.checks.length ? (
         <p className="mt-4 text-sm text-neutral-400">
           Nothing changed between these two runs — every check landed on the same verdict.
         </p>
-      )}
+      ) : null}
+      {/*
+        The empty-checks case is not the same as the nothing-moved case. A
+        comparison against a run that found no website returns no checks at all,
+        and "nothing changed — every check landed on the same verdict" would be
+        a reassuring sentence about a comparison that never happened. The reason
+        above says what did.
+      */}
     </div>
   );
 };

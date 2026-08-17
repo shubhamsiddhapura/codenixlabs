@@ -9,7 +9,7 @@
  * site-type classification that decides what every other check expects.
  */
 import { CheckOutcome, CheckStatus, SiteType } from '../types';
-import { Deadline, FetchResult } from '../services/fetcher';
+import { Deadline, FetchFailure, FetchResult } from '../services/fetcher';
 import { HtmlDocument } from '../services/htmlDocument';
 import { ScanContext } from '../services/scanContext';
 import { parseRobotsTxt } from '../services/robotsTxt';
@@ -24,6 +24,7 @@ import { checkContentStructure } from '../services/checks/contentStructure';
 import { SCORING_VERSION, countBlockers, isBlocking, scoreCheck, toGrade, totalScore, weightsFor } from '../services/scoring';
 import { InvalidUrlError, isApexHost, isSameCompany, normalizeUrl, registrableDomain } from '../utils/url';
 import { looksLikeKeyUrl, looksLikeProductUrl, selectKeyPages } from '../services/discovery';
+import { whyNoWebsite } from '../services/scanEngine';
 
 let passed = 0;
 let failed = 0;
@@ -841,6 +842,30 @@ console.log('\nCheck 6 — crawlability');
   assert(
     '  nor a small page that actually says something',
     !looksParked(page('<html><body><h1>Coming soon</h1><p>Our new store opens in March. Follow us for updates and launch offers.</p></body></html>')),
+  );
+
+  /**
+   * The second shape of nothing: a domain that never answered at all.
+   *
+   * looksParked only fires on a page we actually received, so shubhtanna.com —
+   * no DNS record anywhere — sailed past it into normal scoring and came out
+   * F 35/100 with a lead form under it. Every transport failure has to reach
+   * the no-website path, and each one keeps its own cause so the reader is told
+   * "this domain does not exist" rather than "we could not check your site".
+   */
+  const dead = (failure: string) => page('', { ok: false, status: null, failure: failure as FetchFailure });
+  assert('a domain with no DNS record is not a website', whyNoWebsite(dead('dns')) === 'dns');
+  assert('  a refused connection is not either', whyNoWebsite(dead('connection_refused')) === 'unreachable');
+  assert('  nor a transport error', whyNoWebsite(dead('network')) === 'unreachable');
+  assert('  nor a timeout', whyNoWebsite(dead('timeout')) === 'timeout');
+  assert('  nor a broken certificate', whyNoWebsite(dead('ssl')) === 'ssl');
+  assert('  nor a redirect loop', whyNoWebsite(dead('redirect_loop')) === 'redirect_loop');
+  assert('  the parking case still routes here', whyNoWebsite(page(parkingPage)) === 'parked');
+
+  assert('a healthy page is a website', whyNoWebsite(page(PLAIN_HOMEPAGE)) === null);
+  assert(
+    '  and so is one that answered but refused us — blocked is a finding, not an absence',
+    whyNoWebsite(page('Attention Required! | Cloudflare', { status: 403, ok: false, blocked: true })) === null,
   );
 
   const spa = checkCrawlability(context({ homepage: page('<html><body><div id="root"></div><script src="/app.js"></script></body></html>') }));

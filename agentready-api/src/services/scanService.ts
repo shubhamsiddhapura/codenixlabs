@@ -71,7 +71,7 @@ export async function scanUrl(submittedUrl: string, options: ScanRequestOptions 
     scanDurationMs: result.scanDurationMs,
     jsRenderWarning: result.jsRenderWarning,
     partial: result.partial,
-    parked: result.parked,
+    noWebsite: result.noWebsite,
     scoringVersion: result.scoringVersion,
     comparisonScanId: null,
     unlocked: false,
@@ -128,7 +128,18 @@ const STATS_TTL_MS = 60_000;
 export async function getScanStats(): Promise<ScanStats> {
   if (statsCache && statsCache.expiresAt > Date.now()) return statsCache.value;
 
-  const [totalScans, domains] = await Promise.all([Scan.estimatedDocumentCount(), Scan.distinct('domain')]);
+  // `sitesChecked` is rendered as "N websites checked so far". A domain that
+  // turned out to have no website on it is the one thing that cannot be counted
+  // there without making the sentence false, so it is excluded — the scan still
+  // counts in `totalScans`, because a scan did genuinely happen.
+  const [totalScans, domains] = await Promise.all([
+    Scan.estimatedDocumentCount(),
+    // `$ne: true`, not `false`. Every scan stored before this field existed has
+    // no `noWebsite` key at all — a schema default only applies to new
+    // documents — so an equality match silently excluded the entire history and
+    // took the public counter to zero.
+    Scan.distinct('domain', { noWebsite: { $ne: true } }),
+  ]);
 
   const value: ScanStats = { totalScans, sitesChecked: domains.length };
   statsCache = { value, expiresAt: Date.now() + STATS_TTL_MS };
@@ -158,6 +169,16 @@ export interface RunSummary {
   siteType: SiteType;
   scoringVersion: string;
   partial: boolean;
+  /**
+   * True when this run found no website at all.
+   *
+   * These are stored with grade F and score 0 for want of anything else to put
+   * in the columns, and the history list was rendering that as a red F — so a
+   * site that was down for ten minutes appeared in its own timeline as having
+   * scored zero. The flag exists so the list can say "not reachable" instead of
+   * showing a grade the scan explicitly refused to give.
+   */
+  noWebsite: boolean;
 }
 
 const toRunSummary = (scan: ScanDoc): RunSummary => ({
@@ -168,6 +189,7 @@ const toRunSummary = (scan: ScanDoc): RunSummary => ({
   siteType: scan.siteType,
   scoringVersion: scan.scoringVersion || 'unknown',
   partial: scan.partial,
+  noWebsite: scan.noWebsite,
 });
 
 /** Past runs of the same domain, newest first, excluding the one in hand. */
@@ -231,6 +253,25 @@ export async function compareRuns(beforeId: string, afterId: string): Promise<Ru
   // Order by time rather than trusting the caller, so "before" always means
   // earlier no matter which way round the two ids arrived.
   const [before, after] = a.scannedAt <= b.scannedAt ? [a, b] : [b, a];
+
+  // One of the two runs never produced a score, so there is no comparison to
+  // make. Left to itself this returned "+81 points" for a site that had simply
+  // been offline, and a check list where everything moved from pass to skipped
+  // ranked as "unchanged" — a confident report of progress that never happened.
+  if (before.noWebsite || after.noWebsite) {
+    const dead = before.noWebsite ? before : after;
+    return {
+      domain: before.domain,
+      before: toRunSummary(before),
+      after: toRunSummary(after),
+      comparable: false,
+      incomparableReason:
+        `No website could be read on ${dead.scannedAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, ` +
+        'so that run has nothing in it to compare. Pick a run where the site actually answered.',
+      scoreDelta: null,
+      checks: [],
+    };
+  }
 
   const sameVersion = before.scoringVersion === after.scoringVersion;
   const sameType = before.siteType === after.siteType;
@@ -339,7 +380,7 @@ export function toFullScan(scan: ScanDoc): Record<string, unknown> {
     scanDurationMs: scan.scanDurationMs,
     jsRenderWarning: scan.jsRenderWarning,
     partial: scan.partial,
-    parked: scan.parked,
+    noWebsite: scan.noWebsite,
     audit: auditTrail(scan),
     comparisonScanId: scan.comparisonScanId ? String(scan.comparisonScanId) : null,
     unlocked: true,
@@ -380,7 +421,7 @@ export function toGatedScan(scan: ScanDoc): Record<string, unknown> {
     scanDurationMs: scan.scanDurationMs,
     jsRenderWarning: scan.jsRenderWarning,
     partial: scan.partial,
-    parked: scan.parked,
+    noWebsite: scan.noWebsite,
     audit: auditTrail(scan),
     comparisonScanId: scan.comparisonScanId ? String(scan.comparisonScanId) : null,
     unlocked: false,
@@ -417,7 +458,7 @@ export function toTeaser(scan: ScanDoc, cached: boolean): Record<string, unknown
     fixesAvailable: countFixes(scan),
     jsRenderWarning: scan.jsRenderWarning,
     partial: scan.partial,
-    parked: scan.parked,
+    noWebsite: scan.noWebsite,
     scanDurationMs: scan.scanDurationMs,
     cached,
   };

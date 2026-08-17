@@ -64,6 +64,15 @@ export async function getScan(req: Request, res: Response): Promise<void> {
 /** POST /api/scan/:scanId/unlock — the lead-capture gate. */
 export async function unlockScan(req: Request, res: Response): Promise<void> {
   const scan = await loadScan(req.params.scanId);
+
+  // Nothing was withheld on a scan that found no website, so there is nothing to
+  // unlock. The UI never shows the gate for one of these, but the endpoint has
+  // to hold the same line — otherwise a direct call would take someone's details
+  // and email them an F and 0 out of 100 for a domain that never answered.
+  if (scan.noWebsite) {
+    throw new HttpError(400, 'There is no report to unlock — no website could be read at this address.');
+  }
+
   const { name, email, whatsapp, consent, consentText, consentSource } = validateLeadInput(req.body);
 
   const lead = await Lead.create({
