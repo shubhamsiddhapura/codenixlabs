@@ -95,6 +95,42 @@ function pointsLabel(check: ScanDoc['checks'][number]): string {
   return `${check.pointsAwarded}/${check.pointsPossible} pts`;
 }
 
+/**
+ * The two ways out of the report: WhatsApp, or the contact page.
+ *
+ * Built as a table of table-cells rather than buttons or flexbox — Outlook
+ * ignores flex entirely and renders a styled <button> as plain text, so the
+ * "bulletproof button" pattern (a padded table cell wrapping a block-level
+ * anchor) is the only construction that survives every client.
+ *
+ * The WhatsApp link carries a pre-written message naming the domain and the
+ * grade. Someone tapping it on a phone should not have to explain who they are
+ * or find the report again — and on our side the first message already says
+ * which site and how bad, so a reply can be useful rather than "which site?".
+ */
+function actionButtons(scan: ScanDoc): string {
+  const message = `Hi Codenix Labs — I ran the AI Readiness check on ${scan.domain} and got a grade of ${scan.overallGrade} (${scan.overallScore}/100). Can you help me fix it?`;
+  const whatsappUrl = `https://wa.me/${config.contact.whatsapp}?text=${encodeURIComponent(message)}`;
+
+  const button = (href: string, label: string, background: string, colour: string, border: string): string => `
+    <td style="padding:0 10px 10px 0;">
+      <table cellpadding="0" cellspacing="0" style="border-collapse:separate;">
+        <tr><td style="background:${background};border:1px solid ${border};border-radius:8px;">
+          <a href="${href}" target="_blank" rel="noopener"
+             style="display:inline-block;padding:12px 22px;font-family:${BODY_FONT};font-size:14px;font-weight:600;color:${colour};text-decoration:none;">${label}</a>
+        </td></tr>
+      </table>
+    </td>`;
+
+  return `
+    <table cellpadding="0" cellspacing="0" style="margin-top:16px;">
+      <tr>
+        ${button(whatsappUrl, 'Message us on WhatsApp', '#25D366', '#ffffff', '#1da851')}
+        ${button(escapeHtml(config.contact.url), 'Contact us', '#ffffff', '#0f172a', '#cbd5e1')}
+      </tr>
+    </table>`;
+}
+
 function checkBlock(check: ScanDoc['checks'][number]): string {
   const style = STATUS_STYLES[check.status] || STATUS_STYLES.skipped;
 
@@ -233,10 +269,11 @@ export function buildReportHtml(scan: ScanDoc, recipientName?: string): string {
 
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px;">
         <tr><td style="padding:22px;background:#f1f5f9;border-radius:12px;">
-          <p style="margin:0;font-size:15px;font-weight:600;color:#0f172a;">Want these fixed for you?</p>
+          <p style="margin:0;font-family:${DISPLAY_FONT};font-size:15px;font-weight:600;color:#0f172a;">Want these fixed for you?</p>
           <p style="margin:8px 0 0;font-size:14px;color:#475569;line-height:1.65;">
-            Everything in this report is fixable. Reply to this email or message us on WhatsApp and we will walk you through it — or do it for you.
+            Everything in this report is fixable. Pick whichever is easiest — or just reply to this email.
           </p>
+          ${actionButtons(scan)}
         </td></tr>
       </table>
 
