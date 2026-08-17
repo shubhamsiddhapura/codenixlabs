@@ -163,6 +163,15 @@ export interface ScanResult {
   /** True when the 15s deadline cut the scan short. */
   partial: boolean;
   /**
+   * The domain answers but serves no website — a parking page.
+   *
+   * Kept separate from every other outcome because it is not a degree of
+   * badness. A grade would say "your website has problems"; the truth is that
+   * there is no website to have an opinion about, and the report replaces the
+   * score entirely when this is set.
+   */
+  parked: boolean;
+  /**
    * Which scoring rules produced this number. Stamped on every scan so two
    * scores are only ever compared when they were produced the same way, and so
    * a change to the weights is visible rather than silent.

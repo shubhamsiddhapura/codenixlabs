@@ -37,6 +37,48 @@ const MIN_STATE_BYTES = 3000;
 /** Root containers frameworks mount into; empty ones are the giveaway. */
 const SPA_ROOT_SELECTORS = '#root, #app, #__next, #__nuxt, [data-reactroot]';
 
+/**
+ * A registered domain with nothing behind it.
+ *
+ * ishantanna.in answers HTTP 200 with 114 bytes — a script tag that redirects to
+ * a parking lander, no <body> at all — and we graded it D, 49 out of 100, then
+ * advised it to add Product schema. Every signal was in the stored scan: one
+ * page discovered, an empty shell, done in 1.3 seconds. We scored it anyway.
+ *
+ * The cause is that the checks are built for "a website with problems", not
+ * "no website". Nothing failed outright — there is no robots.txt to block
+ * anyone and no noindex to find — so the trivially-passing checks carried a
+ * score, and normalising away the unverifiable ones, which is what protects
+ * honest sites, inflated a site that does not exist.
+ *
+ * The distinction from a real single-page app matters and is what the last two
+ * conditions are for: a genuine SPA ships a bundle and a mount point, and its
+ * index.html carries meta tags, stylesheets and a title. A parking page has an
+ * inline redirect and nothing else.
+ */
+const PARKED_MAX_BYTES = 1500;
+const PARKED_MAX_TEXT = 50;
+
+export function looksParked(page: HtmlDocument): boolean {
+  if (!page.ok || !page.$) return false;
+
+  const html = page.$.html();
+  if (html.length > PARKED_MAX_BYTES) return false;
+  if (page.text().length > PARKED_MAX_TEXT) return false;
+
+  // A real app loads code and styles from somewhere. A parking page does not.
+  const loadsAnApp = page.$('script[src]').length > 0 || page.$('link[rel="stylesheet"]').length > 0;
+  if (loadsAnApp) return false;
+  if (page.$(SPA_ROOT_SELECTORS).length > 0) return false;
+
+  const redirects =
+    /location\s*\.\s*(href|replace|assign)|window\.location\s*=/i.test(html) ||
+    page.$('meta[http-equiv="refresh"]').length > 0;
+
+  // No body at all is the other shape parking pages take.
+  return redirects || page.$('body').length === 0 || page.$('body').text().trim().length === 0;
+}
+
 export interface CrawlabilityResult {
   outcome: CheckOutcome;
   jsRenderWarning: boolean;

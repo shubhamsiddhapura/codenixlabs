@@ -38,6 +38,8 @@ export interface ScanDoc extends Document {
   jsRenderWarning: boolean;
   /** True when the 15s deadline cut the scan short and some checks are unverified. */
   partial: boolean;
+  /** The domain answers but serves no website — a parking page. */
+  parked: boolean;
   /** Which version of the scoring rules produced overallScore. */
   scoringVersion: string;
   comparisonScanId: Types.ObjectId | null;
@@ -121,6 +123,7 @@ const scanSchema = new Schema<ScanDoc>({
   scanDurationMs: { type: Number, default: 0 },
   jsRenderWarning: { type: Boolean, default: false },
   partial: { type: Boolean, default: false },
+  parked: { type: Boolean, default: false },
   scoringVersion: { type: String, default: '' },
   comparisonScanId: { type: Schema.Types.ObjectId, ref: 'Scan', default: null },
   unlocked: { type: Boolean, default: false },

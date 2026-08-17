@@ -19,7 +19,7 @@ import { checkAgentInterface } from '../services/checks/agentInterface';
 import { checkStructuredData } from '../services/checks/structuredData';
 import { SHIPPING_TOPIC, checkTrustSignals } from '../services/checks/trustSignals';
 import { checkMetaRobots } from '../services/checks/metaRobots';
-import { checkCrawlability } from '../services/checks/crawlability';
+import { checkCrawlability, looksParked } from '../services/checks/crawlability';
 import { checkContentStructure } from '../services/checks/contentStructure';
 import { SCORING_VERSION, countBlockers, isBlocking, scoreCheck, toGrade, totalScore, weightsFor } from '../services/scoring';
 import { InvalidUrlError, isApexHost, isSameCompany, normalizeUrl, registrableDomain } from '../utils/url';
@@ -817,6 +817,31 @@ console.log('\nCheck 5 — indexability');
 console.log('\nCheck 6 — crawlability');
 {
   assertStatus('healthy homepage → pass', checkCrawlability(context()).outcome, 'pass');
+
+  /**
+   * A registered domain with nothing on it. ishantanna.in answered 200 with 114
+   * bytes — a script redirecting to a parking lander — and we graded it D 49/100
+   * and told it to add Product schema.
+   *
+   * The three negatives below are the ones that matter. A real single-page app
+   * looks superficially identical — almost no text, an empty body — and must
+   * never be caught by this, because "you are a JavaScript site" and "you do not
+   * exist" are completely different findings.
+   */
+  const parkingPage =
+    '<!DOCTYPE html><html><head><script>window.onload=function(){window.location.href="/lander"}</script></head></html>';
+  assert('parked domain is recognised', looksParked(page(parkingPage)));
+  assert('  a metarefresh holder too', looksParked(page('<html><head><meta http-equiv="refresh" content="0;url=/lander"></head></html>')));
+
+  assert(
+    '  a real SPA shell is not parked — it ships a bundle',
+    !looksParked(page('<html><head><title>Shop</title></head><body><div id="root"></div><script src="/app.js"></script></body></html>')),
+  );
+  assert('  nor is a normal page', !looksParked(page(PLAIN_HOMEPAGE)));
+  assert(
+    '  nor a small page that actually says something',
+    !looksParked(page('<html><body><h1>Coming soon</h1><p>Our new store opens in March. Follow us for updates and launch offers.</p></body></html>')),
+  );
 
   const spa = checkCrawlability(context({ homepage: page('<html><body><div id="root"></div><script src="/app.js"></script></body></html>') }));
   assertStatus('empty SPA shell → warning', spa.outcome, 'warning');
