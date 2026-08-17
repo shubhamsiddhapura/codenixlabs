@@ -118,9 +118,14 @@
           },
           {
             "@type": "LocalBusiness",
+            "@id": "https://www.codenixlabs.com/#localbusiness",
             "parentOrganization": { "@id": "https://www.codenixlabs.com/#organization" },
             "name": "Codenix Labs",
-            "image": "https://www.codenixlabs.com/og-image.jpg",
+            "url": "https://www.codenixlabs.com",
+            "image": "https://res.cloudinary.com/dsptxtmvk/image/upload/v1773859993/WhatsApp_Image_2026-03-19_at_12.14.44_AM_nrywh7.jpg",
+            "telephone": "+91-8488080162",
+            "email": "codenixlabs@gmail.com",
+            "priceRange": "$$",
             "address": {
               "@type": "PostalAddress",
               "addressLocality": "Surat",
@@ -130,8 +135,10 @@
             },
             "contactPoint": {
               "@type": "ContactPoint",
-              "telephone": "+91-XXXXXXXXXX",
-              "contactType": "Customer Service"
+              "telephone": "+91-8488080162",
+              "contactType": "Customer Service",
+              "email": "codenixlabs@gmail.com",
+              "availableLanguage": ["en", "hi", "gu"]
             }
           },
           {
@@ -152,7 +159,72 @@
   </head>
 
   <body>
-    <div id="root"></div>
+    <!--
+      Content inside #root is the crawler's copy of this page.
+
+      This app is client-rendered, so the server sends an empty frame and every
+      AI crawler that does not run JavaScript receives nothing — our own scanner
+      scores this site 5/10 on crawlability for exactly that reason. React's
+      createRoot() replaces whatever is inside the container when it mounts, so
+      anything written here is shown for a moment, then swapped for the real
+      application. A person effectively never sees it; a crawler only sees this.
+
+      Two rules for editing it:
+
+        1. It must stay true to the page. Serving crawlers something the page
+           does not say is cloaking, and we would be doing the thing this
+           company's own tool exists to catch.
+        2. It is a summary, not a duplicate. Enough for an assistant to know who
+           we are, what we do and how to reach us.
+
+      The real fix is server-side rendering or pre-rendering, which replaces
+      this block entirely. Until then this is what an assistant reads.
+    -->
+    <div id="root">
+      <main>
+        <h1>Codenix Labs — Web Development &amp; UI/UX Design Agency</h1>
+        <p>
+          Codenix Labs is a software development company based in Surat, Gujarat, India, building
+          web applications, mobile apps and digital products for startups and growing businesses.
+          We work with React, Next.js and Node.js, and we stay on after launch with maintenance and
+          support rather than ending at the invoice.
+        </p>
+
+        <h2>What we do</h2>
+        <ul>
+          <li><strong>Web development</strong> — custom websites and web applications built with React and Next.js.</li>
+          <li><strong>Mobile app development</strong> — native and cross-platform apps for iOS and Android.</li>
+          <li><strong>UI/UX design</strong> — interface design, design systems and brand identity.</li>
+          <li><strong>Cloud solutions</strong> — hosting, deployment pipelines and scalable infrastructure.</li>
+          <li><strong>AI integration</strong> — bringing AI features into existing products.</li>
+        </ul>
+
+        <h2>Free AI Readiness Checker</h2>
+        <p>
+          We also run a free tool that checks whether AI assistants — ChatGPT, Claude, Gemini and
+          Perplexity — can actually read your website. It reads your robots.txt, then requests your
+          homepage as each named AI crawler to see what your server really does, checks your
+          structured data and page markup, and gives you the code to fix whatever is broken. It
+          publishes the scoring weights it used, so the number can be audited rather than trusted.
+          Available at <a href="https://www.codenixlabs.com/ai-readiness">codenixlabs.com/ai-readiness</a>.
+        </p>
+
+        <h2>Contact</h2>
+        <p>
+          Email <a href="mailto:codenixlabs@gmail.com">codenixlabs@gmail.com</a> or call
+          <a href="tel:+918488080162">+91 8488080162</a>. More at
+          <a href="https://www.codenixlabs.com/contact">codenixlabs.com/contact</a>.
+        </p>
+
+        <nav aria-label="Main pages">
+          <a href="https://www.codenixlabs.com/services">Services</a>
+          <a href="https://www.codenixlabs.com/portfolio">Portfolio</a>
+          <a href="https://www.codenixlabs.com/about">About</a>
+          <a href="https://www.codenixlabs.com/blog">Blog</a>
+          <a href="https://www.codenixlabs.com/contact">Contact</a>
+        </nav>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

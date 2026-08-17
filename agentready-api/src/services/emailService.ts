@@ -23,26 +23,28 @@ export function emailConfigured(): boolean {
   return Boolean(config.email.apiKey);
 }
 
-/** Send the visitor their full report. Throws so the caller can record failure. */
-// export async function sendReportEmail(scan: ScanDoc, lead: LeadDoc): Promise<void> {
-//   const html = buildReportHtml(scan, lead.name).replace(
-//     '</body>',
-//     `<div style="text-align:center;padding:0 0 28px;font-size:12px;color:#94a3b8;">
-//        <a href="${reportUrl(String(scan._id))}" style="color:#64748b;">View this report in your browser</a>
-//      </div></body>`,
-//   );
+/**
+ * Send the visitor their full report. Throws so the caller can record failure.
+ *
+ * The report is sent as the whole email body rather than a teaser linking to a
+ * hosted copy. There used to be a "View this report in your browser" link
+ * appended below it; it is gone deliberately. The entire report already travels
+ * in the message, so the link offered nothing but a second copy — and the
+ * shareable page it pointed at is the one someone forwards to their developer,
+ * which is a different job from reading it yourself.
+ */
+export async function sendReportEmail(scan: ScanDoc, lead: LeadDoc): Promise<void> {
+  const response = await resend().emails.send({
+    from: config.email.from,
+    to: lead.email,
+    subject: `Your site scored ${scan.overallGrade} for AI readiness — ${scan.domain}`,
+    html: buildReportHtml(scan, lead.name),
+  });
 
-//   const response = await resend().emails.send({
-//     from: config.email.from,
-//     to: lead.email,
-//     subject: `Your store scored ${scan.overallGrade} for AI readiness — ${scan.domain}`,
-//     html,
-//   });
-
-//   if (response.error) {
-//     throw new Error(`Resend API error: ${response.error.message}`);
-//   }
-// }
+  if (response.error) {
+    throw new Error(`Resend API error: ${response.error.message}`);
+  }
+}
 
 /**
  * Internal copy of a captured lead. Best-effort: a failure here must never
