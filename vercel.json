@@ -7,7 +7,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": "linkedinbot|twitterbot|facebookexternalhit|whatsapp|Slurp|bingbot|Googlebot|bots"
+          "value": "linkedinbot|twitterbot|facebookexternalhit|whatsapp|Slurp|bingbot|Googlebot|bots|GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|PerplexityBot|Google-Extended|Amazonbot|Applebot|CCBot|Meta-ExternalAgent|Bytespider"
         }
       ]
     },
@@ -18,7 +18,7 @@
         {
           "type": "header",
           "key": "user-agent",
-          "value": "linkedinbot|twitterbot|facebookexternalhit|whatsapp|Slurp|bingbot|Googlebot|bots"
+          "value": "linkedinbot|twitterbot|facebookexternalhit|whatsapp|Slurp|bingbot|Googlebot|bots|GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|PerplexityBot|Google-Extended|Amazonbot|Applebot|CCBot|Meta-ExternalAgent|Bytespider"
         }
       ]
     },

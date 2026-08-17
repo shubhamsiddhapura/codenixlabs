@@ -43,24 +43,34 @@ function App() {
     <div className="min-h-screen text-white bg-background">
       <Cursor />
       <Navbar />
-      <AnimatePresence mode="wait">
-        <ScrollToTop />
-        <Routes location={location} key={location.pathname}>
-          <Route path="/" element={<Home />} />
-          <Route path="/services" element={<Services />} />
-          <Route path="/ai-readiness" element={<AiReadiness />} />
-          <Route path="/portfolio" element={<Portfolio />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/blog" element={<Blog />} />
-          <Route path="/blog/:slug" element={<BlogPost />} />
-          <Route path="/admin/blog" element={<AdminBlog />} />
-          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-          <Route path="/terms-of-service" element={<TermsOfService />} />
-          <Route path="/cookie-policy" element={<CookiePolicy />} />
-          <Route path="/_internal/demo-showcase" element={<DemoShowcase />} />
-        </Routes>
-      </AnimatePresence>
+      {/*
+        The <main> landmark our own scanner flagged as missing.
+
+        Without it an assistant cannot tell page content apart from the nav and
+        the footer, so it quotes all three together. We already had <nav> and
+        <footer>; this was the one landmark absent, and it costs nothing to add
+        because every route already renders inside this wrapper.
+      */}
+      <main id="main-content">
+        <AnimatePresence mode="wait">
+          <ScrollToTop />
+          <Routes location={location} key={location.pathname}>
+            <Route path="/" element={<Home />} />
+            <Route path="/services" element={<Services />} />
+            <Route path="/ai-readiness" element={<AiReadiness />} />
+            <Route path="/portfolio" element={<Portfolio />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/blog" element={<Blog />} />
+            <Route path="/blog/:slug" element={<BlogPost />} />
+            <Route path="/admin/blog" element={<AdminBlog />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
+            <Route path="/cookie-policy" element={<CookiePolicy />} />
+            <Route path="/_internal/demo-showcase" element={<DemoShowcase />} />
+          </Routes>
+        </AnimatePresence>
+      </main>
       <Footer />
       <Analytics />
     </div>
