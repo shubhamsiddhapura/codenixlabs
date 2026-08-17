@@ -51,7 +51,7 @@ export const config = {
      */
     totalTimeoutMs: num(process.env.SCAN_TOTAL_TIMEOUT_MS, 15000),
     requestTimeoutMs: num(process.env.SCAN_REQUEST_TIMEOUT_MS, 10000),
-    cacheHours: num(process.env.SCAN_CACHE_HOURS, 6),
+    cacheHours: num(process.env.SCAN_CACHE_HOURS, 1),
     rateLimitPerHour: num(process.env.SCAN_RATE_LIMIT_PER_HOUR, 5),
     /**
      * How many pages beyond the homepage to sample. The spec said 3; 5 is the

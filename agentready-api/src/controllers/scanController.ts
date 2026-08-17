@@ -38,7 +38,10 @@ function parseSiteType(value: unknown): SiteType | undefined {
 export async function createScan(req: Request, res: Response): Promise<void> {
   const url = typeof req.body?.url === 'string' ? req.body.url : '';
   const siteType = parseSiteType(req.body?.siteType);
-  const { scan, cached } = await scanUrl(url, siteType);
+  // Explicit opt-in only — a stray truthy value should not silently spend
+  // someone's hourly allowance on a crawl they did not ask for.
+  const refresh = req.body?.refresh === true;
+  const { scan, cached } = await scanUrl(url, { siteType, refresh });
   res.json({ success: true, data: toTeaser(scan, cached) });
 }
 
@@ -175,7 +178,7 @@ export async function compareScan(req: Request, res: Response): Promise<void> {
     throw new HttpError(400, 'That is the same store you just scanned. Paste a competitor\'s URL instead.');
   }
 
-  const { scan: competitor } = await scanUrl(competitorUrl);
+  const { scan: competitor } = await scanUrl(competitorUrl, {});
 
   scan.comparisonScanId = competitor._id;
   await scan.save();

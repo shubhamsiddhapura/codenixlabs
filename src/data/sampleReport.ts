@@ -39,6 +39,7 @@ export const SAMPLE_AUDIT: AuditTrail = {
   pagesDiscovered: 412,
   renderMode: 'server_rendered',
   siteTypeOverridden: false,
+  cacheHours: 1,
   method:
     'Static HTML only — no JavaScript is executed. Checks that could not be verified are excluded from the score rather than counted as zero.',
 };

@@ -46,7 +46,7 @@ const AiReadiness: React.FC = () => {
   const [lastUrl, setLastUrl] = useState('');
   const resultsRef = useRef<HTMLDivElement>(null);
 
-  const runScan = async (url: string, siteType?: SiteType): Promise<void> => {
+  const runScan = async (url: string, siteType?: SiteType, refresh = false): Promise<void> => {
     setScanning(true);
     setScanError(null);
     setLastUrl(url);
@@ -58,7 +58,7 @@ const AiReadiness: React.FC = () => {
     setEmailed(null);
 
     try {
-      setTeaser(await startScan(url, siteType));
+      setTeaser(await startScan(url, siteType, refresh));
       window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
     } catch (error) {
       setScanError(messageOf(error));
@@ -75,6 +75,17 @@ const AiReadiness: React.FC = () => {
    */
   const reclassify = (siteType: SiteType): void => {
     if (lastUrl) void runScan(lastUrl, siteType);
+  };
+
+  /**
+   * Crawl the site again, ignoring the stored result.
+   *
+   * Offered only on a cached report, which is the one place someone can be
+   * looking at a score that no longer reflects their site. It spends one of
+   * their hourly scans like any other.
+   */
+  const rescan = (): void => {
+    if (lastUrl) void runScan(lastUrl, undefined, true);
   };
 
   const runUnlock = async (lead: LeadInput): Promise<void> => {
@@ -218,6 +229,7 @@ const AiReadiness: React.FC = () => {
                 partial={teaser.partial}
                 cached={teaser.cached}
                 onReclassify={reclassify}
+                onRescan={rescan}
                 busy={scanning}
               />
 
