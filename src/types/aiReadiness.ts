@@ -93,8 +93,8 @@ export interface TeaserScan {
   fixesAvailable: number;
   jsRenderWarning: boolean;
   partial: boolean;
-  /** The domain answers but serves no website — see ParkedNotice. */
-  parked: boolean;
+  /** No website could be read at this address — see NoWebsiteNotice. */
+  noWebsite: boolean;
   scanDurationMs: number;
   cached: boolean;
 }
@@ -117,7 +117,7 @@ export interface FullScan {
   scanDurationMs: number;
   jsRenderWarning: boolean;
   partial: boolean;
-  parked: boolean;
+  noWebsite: boolean;
   comparisonScanId: string | null;
   unlocked: boolean;
   fixesAvailable?: number;
@@ -161,6 +161,8 @@ export interface RunSummary {
   siteType: SiteType;
   scoringVersion: string;
   partial: boolean;
+  /** True when this run found no website — show "not reachable", not a grade. */
+  noWebsite: boolean;
 }
 
 export type CheckChange = 'improved' | 'regressed' | 'unchanged' | 'appeared' | 'disappeared';

@@ -4,20 +4,25 @@ import { Link } from 'react-router-dom';
 import { Globe2 } from 'lucide-react';
 
 /**
- * Shown instead of a report when the domain has no website on it.
+ * Shown instead of a report when no website could be read at the address.
  *
  * Deliberately has no grade, no ring, no score and no checks. We used to give a
- * parked domain a D and 49 out of 100, then advise it to add Product schema —
- * a confident verdict about a site nobody has built. A letter grade cannot say
- * "there is nothing here": a D reads as "your website has problems" and an F
- * reads as "your website is terrible", and both are claims about a website that
- * does not exist.
+ * parked domain a D and 49 out of 100, and an unregistered one an F and 35 —
+ * then advise both to add Product schema. Those are confident verdicts about
+ * sites nobody has built. A letter grade cannot say "there is nothing here": a
+ * D reads as "your website has problems" and an F reads as "your website is
+ * terrible", and both are claims about a website that did not answer.
+ *
+ * The cause — parked, no DNS record, server offline, timed out, broken
+ * certificate, redirect loop — is carried in `summary`, which the API writes
+ * per cause. This component stays generic on purpose: it must not assume the
+ * site was never built, because a site that is merely down was.
  *
  * There is no lead-capture gate here either. Nothing has been withheld, so
  * there is nothing to unlock, and asking for an email in exchange for "we found
  * no website" would be taking details for nothing.
  */
-export const ParkedNotice: React.FC<{ domain: string; summary: string; onScanAnother?: () => void }> = ({
+export const NoWebsiteNotice: React.FC<{ domain: string; summary: string; onScanAnother?: () => void }> = ({
   domain,
   summary,
   onScanAnother,
@@ -41,9 +46,9 @@ export const ParkedNotice: React.FC<{ domain: string; summary: string; onScanAno
 
         <div className="p-5 mt-8 text-sm leading-relaxed text-left border rounded-2xl border-white/10 bg-white/[0.02] text-neutral-400">
           <strong className="block mb-2 font-semibold text-white">Why there is no score</strong>
-          Grading this would mean having an opinion about a website that has not been built. A letter would say your site
-          has problems, when the honest answer is that there is no site here yet. Once something is published at this
-          address, scan it again and you will get a real report.
+          Grading needs a page to grade, and none arrived. A letter would say your site has problems, when the honest
+          answer is that there was nothing here to read — which is exactly what an AI assistant would have found too.
+          Once there is something at this address, scan it again and you will get a real report.
         </div>
 
         <div className="flex flex-col items-center justify-center gap-4 mt-8 sm:flex-row">
@@ -68,4 +73,4 @@ export const ParkedNotice: React.FC<{ domain: string; summary: string; onScanAno
   </motion.section>
 );
 
-export default ParkedNotice;
+export default NoWebsiteNotice;

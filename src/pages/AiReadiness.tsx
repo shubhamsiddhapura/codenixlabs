@@ -15,7 +15,7 @@ import ScanProgress from '../components/aiReadiness/ScanProgress';
 import ScanCounter from '../components/aiReadiness/ScanCounter';
 import RunHistory from '../components/aiReadiness/RunHistory';
 import SampleReport from '../components/aiReadiness/SampleReport';
-import ParkedNotice from '../components/aiReadiness/ParkedNotice';
+import NoWebsiteNotice from '../components/aiReadiness/NoWebsiteNotice';
 
 import { AiReadinessError, compareScan, startScan, unlockScan } from '../services/aiReadinessService';
 import type { ComparisonResult, FullScan, LeadInput, SiteType, TeaserScan } from '../types/aiReadiness';
@@ -216,11 +216,12 @@ const AiReadiness: React.FC = () => {
       {/* Results */}
       <div ref={resultsRef} className="scroll-mt-28">
         {/*
-          A parked domain replaces the whole report — no grade, no checks, and
-          no lead gate, because nothing has been withheld to unlock.
+          An address with no website on it replaces the whole report — no
+          grade, no checks, and no lead gate, because nothing has been withheld
+          to unlock.
         */}
-        {teaser?.parked ? (
-          <ParkedNotice
+        {teaser?.noWebsite ? (
+          <NoWebsiteNotice
             domain={teaser.domain}
             summary={teaser.summary}
             onScanAnother={() => {
@@ -230,7 +231,7 @@ const AiReadiness: React.FC = () => {
           />
         ) : null}
 
-        {teaser && !teaser.parked && !fullScan ? (
+        {teaser && !teaser.noWebsite && !fullScan ? (
           <section className="relative py-12">
             <div className="container max-w-3xl px-4 mx-auto sm:px-6 lg:px-8">
               <ResultHeader
