@@ -16,7 +16,7 @@ import { checkStructuredData } from './checks/structuredData';
 import { SCHEMA_PROFILES } from './checks/schemaProfiles';
 import { checkTrustSignals } from './checks/trustSignals';
 import { checkMetaRobots } from './checks/metaRobots';
-import { checkCrawlability } from './checks/crawlability';
+import { checkCrawlability, looksParked } from './checks/crawlability';
 
 /** Report order — worst-to-fix-first is handled in the UI, this is stable order. */
 const CHECK_ORDER: CheckId[] = [
@@ -58,6 +58,19 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
   const deadline = new Deadline(config.scanner.totalTimeoutMs);
 
   const homepage = new HtmlDocument(await fetchWithHttpFallback(href, deadline));
+
+  /**
+   * Stop before anything else if there is no website here.
+   *
+   * Checked immediately after the homepage and before any other request,
+   * because everything downstream — sampling pages, probing crawlers, judging
+   * schema — is meaningless against a parking page, and running it produces a
+   * confident grade for a domain nobody has built. Returning early also spares
+   * the ~20 requests.
+   */
+  if (looksParked(homepage)) {
+    return notAWebsite(submittedUrl, domain, homepage, startedAt);
+  }
 
   const robotsTxt = await fetchUrl(`${origin}/robots.txt`, deadline);
   const robots: ParsedRobots | null =
@@ -184,6 +197,7 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
     // A site with no discoverable subpages gets a complete, cacheable scan;
     // only a timed-out one is worth re-running.
     partial: structured.timedOut,
+    parked: false,
     scoringVersion: SCORING_VERSION,
   };
 }
@@ -254,6 +268,58 @@ function titleFor(checkId: CheckId, siteType: SiteType): string {
   if (checkId === 'trust_signals') return 'Trust and identity pages';
   if (checkId === 'meta_robots') return 'Search & AI indexability';
   return 'Crawlability & response health';
+}
+
+/**
+ * The result for a domain that has no website on it.
+ *
+ * Every check is `skipped`, so nothing is scored out of anything and no letter
+ * grade is implied. `parked` is what the report reads to replace the whole
+ * score panel with an explanation — a D would say "your website has problems"
+ * and an F would say "your website is terrible", when the truth is that there
+ * is no website to have an opinion about.
+ */
+function notAWebsite(submittedUrl: string, domain: string, homepage: HtmlDocument, startedAt: number): ScanResult {
+  const checks: CheckResult[] = CHECK_ORDER.map((checkId) =>
+    scoreCheck(
+      {
+        checkId,
+        title: titleFor(checkId, 'general'),
+        status: 'skipped',
+        details: 'Not checked — this domain does not serve a website.',
+        humanExplanation:
+          'There is nothing on this domain for us to check yet, so we have not scored it.',
+        generatedFix: null,
+        generatedFixLanguage: null,
+        generatedFixTarget: null,
+      },
+      'general',
+    ),
+  );
+
+  return {
+    domain,
+    submittedUrl,
+    siteType: 'general',
+    siteTypeConfidence: 'low',
+    siteTypeEvidence: ['no website found on this domain'],
+    siteTypeOverridden: false,
+    overallScore: 0,
+    overallGrade: 'F',
+    summary:
+      `${domain} does not appear to have a website on it yet. The address answers, but it returns an almost empty page that ` +
+      'forwards visitors to a domain-parking holder rather than serving any content. ' +
+      'There is nothing here for an AI assistant — or for us — to read, so we have not given it a score.',
+    checks,
+    pagesScanned: [homepage.url],
+    pagesDiscovered: 0,
+    renderMode: 'empty_shell',
+    scanDurationMs: Date.now() - startedAt,
+    jsRenderWarning: false,
+    partial: false,
+    parked: true,
+    scoringVersion: SCORING_VERSION,
+  };
 }
 
 /** Spec section 8: on timeout, report the remainder as unable to verify. */

@@ -93,6 +93,8 @@ export interface TeaserScan {
   fixesAvailable: number;
   jsRenderWarning: boolean;
   partial: boolean;
+  /** The domain answers but serves no website — see ParkedNotice. */
+  parked: boolean;
   scanDurationMs: number;
   cached: boolean;
 }
@@ -115,6 +117,7 @@ export interface FullScan {
   scanDurationMs: number;
   jsRenderWarning: boolean;
   partial: boolean;
+  parked: boolean;
   comparisonScanId: string | null;
   unlocked: boolean;
   fixesAvailable?: number;
