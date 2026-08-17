@@ -75,10 +75,13 @@ function fallbackMessage(status: number): string {
  * corrects a low-confidence classification instead of reading a report built on
  * a wrong assumption.
  */
-export async function startScan(url: string, siteType?: SiteType): Promise<TeaserScan> {
+export async function startScan(url: string, siteType?: SiteType, refresh = false): Promise<TeaserScan> {
   const { data } = await request<TeaserScan>('/api/scan', {
     method: 'POST',
-    body: JSON.stringify(siteType ? { url, siteType } : { url }),
+    // `refresh` ignores any stored result and crawls again. It still spends one
+    // of the caller's hourly scans, so it is not a way around the rate limit —
+    // only around the cache, for the person who just fixed something.
+    body: JSON.stringify({ url, ...(siteType ? { siteType } : {}), ...(refresh ? { refresh: true } : {}) }),
   });
   return data;
 }

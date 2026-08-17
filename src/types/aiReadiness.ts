@@ -37,6 +37,8 @@ export interface AuditTrail {
   pagesDiscovered: number;
   renderMode: RenderMode;
   siteTypeOverridden: boolean;
+  /** How long a result is reused before we crawl again, in hours. */
+  cacheHours: number;
   method: string;
 }
 

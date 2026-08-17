@@ -8,9 +8,15 @@ import { normalizeUrl } from '../utils/url';
 /**
  * Persistence and caching around the scan engine.
  *
- * The 6-hour cache does double duty: it keeps a casual visitor from re-scanning
- * the same store on every page refresh, and it stops the tool being used as a
- * free crawling proxy for someone else's site.
+ * The cache does double duty: it keeps a casual visitor from re-scanning the
+ * same store on every page refresh, and it stops the tool being used as a free
+ * crawling proxy for someone else's site.
+ *
+ * One hour, not six. Six was long enough that someone could fix their site and
+ * still be shown the old report at the end of the working day — the fix-then-
+ * check-again loop is the whole point of this tool, and the cache was breaking
+ * it. An hour still absorbs the repeat traffic the cache exists for, and the
+ * report now both states the window and offers a button past it.
  */
 
 export interface ScanOutcome {
@@ -19,11 +25,31 @@ export interface ScanOutcome {
   cached: boolean;
 }
 
-export async function scanUrl(submittedUrl: string, siteType?: SiteType): Promise<ScanOutcome> {
+export interface ScanRequestOptions {
+  siteType?: SiteType;
+  /**
+   * Ignore any stored result and crawl again.
+   *
+   * The cache exists to stop a site being hammered by many visitors and to stop
+   * this tool being used as a free crawler — neither of which describes the one
+   * person who just fixed something and wants to know whether it worked. That
+   * person was being shown their own stale report with no way past it, which is
+   * the exact moment the product is most useful and was least useful.
+   *
+   * It is not a loophole: a forced scan still spends one of the caller's hourly
+   * allowance, so nobody gets more crawls than they could already get.
+   */
+  refresh?: boolean;
+}
+
+export async function scanUrl(submittedUrl: string, options: ScanRequestOptions = {}): Promise<ScanOutcome> {
+  const { siteType, refresh } = options;
   const { domain } = normalizeUrl(submittedUrl);
 
-  const cached = await findCachedScan(domain, siteType);
-  if (cached) return { scan: cached, cached: true };
+  if (!refresh) {
+    const cached = await findCachedScan(domain, siteType);
+    if (cached) return { scan: cached, cached: true };
+  }
 
   const result = await runScan(submittedUrl, { siteType });
 
@@ -59,8 +85,8 @@ async function findCachedScan(domain: string, siteType?: SiteType): Promise<Scan
   const query: Record<string, unknown> = {
     domain,
     scannedAt: { $gte: cutoff },
-    // A partial scan is not worth serving for six hours — the next visitor
-    // deserves a real attempt, so only complete scans are cacheable.
+    // A partial scan is not worth reusing at all — the next visitor deserves a
+    // real attempt, so only complete scans are cacheable.
     partial: false,
     // Scores are only comparable within one version of the rules, so a scan
     // made under older weights must not be served as if it were current.
@@ -274,6 +300,10 @@ function auditTrail(scan: ScanDoc): Record<string, unknown> {
     pagesDiscovered: Math.max(scan.pagesDiscovered, scan.pagesScanned.length - 1),
     renderMode: scan.renderMode,
     siteTypeOverridden: scan.siteTypeOverridden,
+    // Stated rather than implied. A reader who does not know results are reused
+    // cannot tell a stale report from a fresh one, and would have no reason to
+    // look for the button that forces a new crawl.
+    cacheHours: config.scanner.cacheHours,
     method: 'Static HTML only — no JavaScript is executed. Checks that could not be verified are excluded from the score rather than counted as zero.',
   };
 }

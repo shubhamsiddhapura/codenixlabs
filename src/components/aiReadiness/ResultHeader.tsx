@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertOctagon, Info } from 'lucide-react';
+import { AlertOctagon, Info, RotateCw } from 'lucide-react';
 import GradeRing from './GradeRing';
 import { SITE_TYPE_LABEL, type AuditTrail, type Confidence, type Grade, type SiteType } from '../../types/aiReadiness';
 
@@ -30,8 +30,10 @@ export const ResultHeader: React.FC<{
   partial: boolean;
   cached?: boolean;
   onReclassify?: (siteType: SiteType) => void;
+  /** Force a fresh crawl, ignoring the stored result. */
+  onRescan?: () => void;
   busy?: boolean;
-}> = ({ domain, grade, score, summary, siteType, confidence, overridden, evidence, audit, partial, cached, onReclassify, busy }) => (
+}> = ({ domain, grade, score, summary, siteType, confidence, overridden, evidence, audit, partial, cached, onReclassify, onRescan, busy }) => (
   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
     <div className="flex flex-col items-center gap-8 p-6 text-center glass rounded-3xl sm:flex-row sm:p-9 sm:text-left">
       <GradeRing grade={grade} score={score} />
@@ -82,10 +84,31 @@ export const ResultHeader: React.FC<{
         </Notice>
       ) : null}
 
+      {/*
+        A stale report with no way past it is the worst moment this tool has:
+        someone has just fixed something and we hand them their old score back.
+        So the window is named, and the way out sits inside the same notice.
+      */}
       {cached ? (
         <Notice tone="neutral">
-          This site was scanned recently, so we are showing those results rather than crawling it again. They are at most six
-          hours old.
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-2">
+            <span>
+              This site was scanned in the last {audit.cacheHours === 1 ? 'hour' : `${audit.cacheHours} hours`}, so we are
+              showing those results rather than crawling it again.
+              {onRescan ? ' Just changed something?' : ''}
+            </span>
+            {onRescan ? (
+              <button
+                type="button"
+                onClick={onRescan}
+                disabled={busy}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+              >
+                <RotateCw size={13} aria-hidden="true" className={busy ? 'animate-spin' : ''} />
+                {busy ? 'Scanning…' : 'Scan again now'}
+              </button>
+            ) : null}
+          </span>
         </Notice>
       ) : null}
     </div>

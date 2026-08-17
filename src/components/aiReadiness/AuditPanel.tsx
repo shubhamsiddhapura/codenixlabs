@@ -55,6 +55,18 @@ export const AuditPanel: React.FC<{ audit: AuditTrail; checks: ScanCheck[] }> = 
           </Row>
 
           <Row label="Method">{audit.method}</Row>
+          {/*
+            Stated outright rather than left to be discovered. A reader who does
+            not know results are reused cannot tell a fresh report from an old
+            one — and isvisible.ai, the best of the free tools, prints its own
+            60-minute window on every report. Saying it costs nothing and
+            removes a question the reader would otherwise have to guess at.
+          */}
+          <Row label="Freshness">
+            A result is reused for up to {audit.cacheHours === 1 ? 'an hour' : `${audit.cacheHours} hours`} before we crawl
+            again, so the same site checked twice in that window returns the same report. Any cached report offers a button
+            to scan again immediately.
+          </Row>
 
           {skipped.length ? (
             <Row label="Left out of the score">
