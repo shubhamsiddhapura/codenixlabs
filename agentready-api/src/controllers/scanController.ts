@@ -269,3 +269,4 @@ function validateLeadInput(body: unknown): LeadInput {
 
   return { name, email, whatsapp, consent: true, consentText, consentSource };
 }
+
