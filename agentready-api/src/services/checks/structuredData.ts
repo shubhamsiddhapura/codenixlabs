@@ -3,6 +3,7 @@ import { ScanContext } from '../scanContext';
 import { HtmlDocument, typesOf } from '../htmlDocument';
 import { SCHEMA_PROFILES, SchemaField, SchemaProfile } from './schemaProfiles';
 import { clientRenderWarning } from './crawlability';
+import { looksLikeProductUrl } from '../discovery';
 
 /**
  * Check 3 — structured data (the heaviest check for every site type).
@@ -42,6 +43,7 @@ export function checkStructuredData(context: ScanContext): CheckOutcome {
    * sampled subpage would fail sites that are doing it correctly.
    */
   const judgeSubpages = context.siteType === 'ecommerce' || context.siteType === 'content';
+
   const candidates = judgeSubpages && context.keyPages.length ? context.keyPages : [context.homepage];
   // A 403 challenge page parses perfectly well as HTML, so "did cheerio load
   // it" is not the question — "did we receive the real page" is.
@@ -80,6 +82,79 @@ export function checkStructuredData(context: ScanContext): CheckOutcome {
   const fix = profile.buildFix(context, exemplar?.page || readablePages[0]);
 
   const pageNoun = judgeSubpages ? context.profile.keyPageLabel : 'homepage';
+
+  /**
+   * We guessed what kind of site this is, and they published schema — just not
+   * the type we guessed at.
+   *
+   * 58 of 93 stored scans were classified `general` with `low` confidence, and
+   * the single largest source of lost points in the whole database was
+   * "expected Organization and found none". mrisoftware.com is the clearest
+   * case: a property-management software company we labelled a *content* site,
+   * then failed 22 points deep for not carrying news-article markup. It
+   * publishes WebPage, WebSite, Organization and BreadcrumbList. It is doing
+   * structured data well.
+   *
+   * So when we are not confident about the site type, a site that publishes
+   * *some* recognised schema gets a warning naming what we found, not a zero.
+   * A guess of ours should cost a few points, never the whole check.
+   *
+   * High confidence stays strict on purpose: a store we are sure is a store,
+   * carrying Organization but no Product markup, really is failing the thing
+   * that matters, and softening that would gut the check.
+   */
+  /**
+   * We found no Product markup, and we never actually opened a product page.
+   *
+   * themancompany.com was failed 0 out of 28 for "no Product markup" — and the
+   * single page we looked at was `/collections/hair`, a category listing.
+   * Product schema belongs on the page for one product; a listing is not
+   * supposed to carry it, so finding none there proves nothing about the store.
+   *
+   * Deliberately judged on the outcome rather than by filtering the URLs up
+   * front. A store whose product URLs do not match any shape we recognise, but
+   * whose pages carry perfectly good Product markup, still gets judged and still
+   * passes — filtering first would have skipped it and quietly hidden good work.
+   * Only when both are true — nothing found, and nothing that looks like a
+   * product page was opened — do we step aside. A skipped check scores nothing
+   * out of nothing, so our sampling missing the right pages costs the site
+   * nothing.
+   */
+  const openedAKeyPage = readablePages.some((page) => looksLikeProductUrl(page.url));
+  if (!withSchema.length && judgeSubpages && context.siteType === 'ecommerce' && !openedAKeyPage) {
+    return {
+      ...base,
+      status: 'skipped',
+      details: `No ${profile.label} markup found, but none of the ${readablePages.length} page(s) we sampled were individual ${context.profile.keyPageLabel} — only listing or category pages, which are not where it belongs. Not scored.`,
+      humanExplanation:
+        `We look for ${profile.label} data on your individual ${context.profile.keyPageLabel}, and the pages we happened to find were category and listing pages instead. ` +
+        'Listing pages are not supposed to carry it, so finding none there tells us nothing about your site — and we would rather say that than mark you down for something we did not properly look at. ' +
+        `It is still worth two minutes of your time: open one of your ${context.profile.keyPageLabel}, view the page source, and search it for "${profile.label}". ` +
+        'If it is not there, the block below is a starting point — this is the highest-value thing on the whole report to get right.',
+      generatedFix: fix,
+      generatedFixTarget: profile.fixTarget,
+    };
+  }
+
+  const otherSchema = otherSchemaTypes(readablePages, profile);
+  if (!withSchema.length && context.siteTypeConfidence !== 'high' && otherSchema.length) {
+    return {
+      ...base,
+      status: 'warning',
+      details: `No ${profile.label} markup, but ${otherSchema.join(', ')} found on ${readablePages.length} page(s). Site type was detected with ${context.siteTypeConfidence} confidence, so this is not scored as a failure.`,
+      humanExplanation:
+        `Your pages do publish structured data — we found ${joinWords(otherSchema)} — so the machine-readable basics are there. ` +
+        `What we did not find is ${profile.label} markup, which is what we would expect if this is ${
+          context.siteType === 'general' ? 'a business site' : `a ${context.siteType.replace('_', ' ')}`
+        }. ` +
+        'We are telling you rather than marking you down for it, because we were not confident enough about what kind of site this is to be sure that is the right thing to ask for. ' +
+        `If it is, adding ${profile.label} is worth doing — ${profile.why}. If it is not, you can ignore this and re-run the scan with the correct site type chosen at the top of the page. ` +
+        'The block below is a starting point.' +
+        clientRenderWarning(context.homepage),
+      generatedFix: fix,
+      generatedFixTarget: profile.fixTarget,
+    };
+  }
 
   if (!withSchema.length) {
     return {
@@ -134,11 +209,26 @@ export function checkStructuredData(context: ScanContext): CheckOutcome {
     .filter(Boolean)
     .join(' ');
 
-  // Missing one or two fields is a gap worth flagging; missing more than that
-  // means the markup is present but not usable, which for an agent is the same
-  // as absent. The spec names the 1-2 case explicitly; this extends it rather
-  // than scoring a shell of a schema as half credit.
-  const severelyIncomplete = missingUnion.length >= 3 || pagesWithout.length === readablePages.length;
+  /**
+   * When incomplete markup stops counting as markup at all.
+   *
+   * The old rule was "three or more missing fields is a fail", and it produced
+   * this on zofffoods.com: Product schema present on 5 pages out of 5, four
+   * fields missing, scored **0 out of 28** — the identical score we give a store
+   * with no structured data whatsoever. A shop that did most of the work and one
+   * that did none cannot land in the same place; the reader learns nothing from
+   * a number that cannot tell them apart, and the one who tried is told their
+   * effort was worthless.
+   *
+   * A flat count was the wrong measure anyway, because profiles ask for
+   * different numbers of fields — three missing out of four is a shell, three
+   * missing out of nine is a gap. So the test is now proportional, and a page
+   * that carries the schema keeps its half credit unless most of the required
+   * fields are absent.
+   */
+  const requiredCount = profile.required.length || 1;
+  const missingMost = missingUnion.length / requiredCount > 0.6;
+  const severelyIncomplete = missingMost || pagesWithout.length === readablePages.length;
 
   /**
    * Two independent problems, either of which can be absent.
@@ -205,6 +295,53 @@ function describeBonusSchema(pages: HtmlDocument[]): { detail: string; opportuni
     detail,
     opportunity: `Two optional additions worth knowing about, neither of which counts against you: ${missing.join('; and ')}.`,
   };
+}
+
+/**
+ * Schema types that describe the business or the page, other than the one we
+ * asked for.
+ *
+ * Deliberately a named list rather than "anything with an @type". Half the web
+ * emits ImageObject, ListItem, SearchAction and PostalAddress as nested fragments
+ * of some larger node, and counting those as "you publish structured data" would
+ * hand out credit for markup nobody authored on purpose. These are the types a
+ * site publishes because it decided to.
+ */
+const MEANINGFUL_SCHEMA = new Set([
+  'organization',
+  'corporation',
+  'localbusiness',
+  'website',
+  'webpage',
+  'product',
+  'article',
+  'newsarticle',
+  'blogposting',
+  'softwareapplication',
+  'service',
+  'collectionpage',
+  'itemlist',
+  'faqpage',
+  'qapage',
+  'breadcrumblist',
+  'person',
+  'event',
+  'recipe',
+  'course',
+  'jobposting',
+]);
+
+function otherSchemaTypes(pages: HtmlDocument[], profile: SchemaProfile): string[] {
+  const found = new Set<string>();
+  for (const page of pages) {
+    for (const node of page.jsonLd()) {
+      for (const type of typesOf(node)) {
+        if (profile.accepts(type)) continue;
+        if (MEANINGFUL_SCHEMA.has(type.toLowerCase())) found.add(type);
+      }
+    }
+  }
+  return [...found].sort();
 }
 
 function pageHasType(page: HtmlDocument, matcher: RegExp): boolean {

@@ -10,7 +10,7 @@
  */
 import { CheckOutcome, CheckStatus, SiteType } from '../types';
 import { Deadline, FetchFailure, FetchResult } from '../services/fetcher';
-import { HtmlDocument } from '../services/htmlDocument';
+import { HtmlDocument, typesOf } from '../services/htmlDocument';
 import { ScanContext } from '../services/scanContext';
 import { parseRobotsTxt } from '../services/robotsTxt';
 import { SITE_PROFILES, detectSiteType, profileFor } from '../services/siteType';
@@ -21,7 +21,7 @@ import { SHIPPING_TOPIC, checkTrustSignals } from '../services/checks/trustSigna
 import { checkMetaRobots } from '../services/checks/metaRobots';
 import { checkCrawlability, looksParked } from '../services/checks/crawlability';
 import { checkContentStructure } from '../services/checks/contentStructure';
-import { SCORING_VERSION, countBlockers, isBlocking, scoreCheck, toGrade, totalScore, weightsFor } from '../services/scoring';
+import { SCAN_CEILING, SCORING_VERSION, countBlockers, isBlocking, scoreCheck, toGrade, totalScore, weightsFor } from '../services/scoring';
 import { InvalidUrlError, isApexHost, isSameCompany, normalizeUrl, registrableDomain } from '../utils/url';
 import { looksLikeKeyUrl, looksLikeProductUrl, selectKeyPages } from '../services/discovery';
 import { whyNoWebsite } from '../services/scanEngine';
@@ -56,6 +56,8 @@ function response(overrides: Partial<FetchResult> = {}): FetchResult {
     contentType: 'text/html',
     failure: null,
     blocked: false,
+    rateLimited: false,
+    truncated: false,
     durationMs: 10,
     ...overrides,
   };
@@ -268,6 +270,72 @@ console.log('\nCheck 1 — AI bot access (robots.txt)');
   assert('  fix names the blocking line', Boolean(blocked.generatedFix?.includes('Disallow: /')));
   assert('  and says exactly which file it goes in', blocked.generatedFixTarget === 'https://shop.test/robots.txt', String(blocked.generatedFixTarget));
   assert('  fix adds an Allow block for GPTBot', Boolean(blocked.generatedFix?.includes('User-agent: GPTBot')));
+
+  /**
+   * A rate limit is not a refusal.
+   *
+   * mrisoftware.com served Amazonbot a 200 and then returned 429 to the next two
+   * requests — our own eleven-probe burst tripping its limiter. We reported that
+   * as "the server refuses AI crawlers" and took a 25-point check to zero on a
+   * site that blocks nobody. The 403 case below has to keep failing, or this fix
+   * would have quietly disabled the check that finds real firewall blocks.
+   */
+  const limitedProbe = response({ status: 429, ok: false, rateLimited: true });
+  const servedProbe = response({ status: 200, ok: true });
+  const rateLimited = checkBotAccess(
+    context({ botProbes: { Amazonbot: limitedProbe, GPTBot: servedProbe, 'Googlebot-control': servedProbe } }),
+  );
+  assertStatus('a 429 probe → pass, not fail (rate limit ≠ block)', rateLimited, 'pass');
+  assert('  and the report says we could not test that crawler', rateLimited.details.includes('rate-limited'), rateLimited.details);
+  assert(
+    '  the access row does not claim it was live-tested',
+    rateLimited.agentAccess?.find((row) => row.agent === 'Amazonbot')?.liveTested === false,
+  );
+  assert(
+    '  nor that it was blocked',
+    rateLimited.agentAccess?.find((row) => row.agent === 'Amazonbot')?.status === 'allowed',
+  );
+
+  const forbiddenProbe = response({ status: 403, ok: false, blocked: true });
+  assertStatus(
+    '  but a 403 probe still fails — real firewall blocks must survive this fix',
+    checkBotAccess(context({ botProbes: { GPTBot: forbiddenProbe, 'Googlebot-control': servedProbe } })),
+    'fail',
+  );
+
+  /**
+   * What we stay quiet about, and what we must never stop reporting.
+   *
+   * Read off 23 real warnings in the stored scans. Nearly forty distinct paths
+   * were being flagged and almost none were content — the low point was warning
+   * a site for disallowing `/.git/`, which is a security necessity. A warning
+   * that is wrong most of the time teaches the reader to ignore the ones that
+   * are right.
+   *
+   * Both lists are load-bearing. Widening the housekeeping patterns is easy and
+   * quietly turns this check off; the second list is what stops that, and
+   * `/services/` is there because a bare `services` token — added for Shopify's
+   * internal endpoint — was silencing the most important page a clinic or an
+   * agency has.
+   */
+  const flags = (rulePath: string): boolean => {
+    const robots = parseRobotsTxt(`User-agent: *\nAllow: /\nDisallow: ${rulePath}`);
+    const status = checkBotAccess(context({ siteType: 'general', profile: profileFor('general'), robotsTxt: robotsResponse, robots })).status;
+    return status === 'warning' || status === 'fail';
+  };
+
+  const CORRECT_TO_BLOCK = ['/.git/', '/404', '/django-admin/', '/dashboard', '/notifications', '/invites/',
+    '/oauth', '/preauthorize', '/confirm', '/u/', '/my_reports/reports/*', '/file_download', '/get_video',
+    '/imgres', '/sdch', '/setprefs', '/channel_picker', '/feeds/videos.xml', '/analytics/seomagic/', '/munin*',
+    '/archive/graphs.php', '/old-browser.html', '/pages/coming-soon', '/pages/private-page', '/m/', '/country/',
+    '/partner/', '/bitria100', '/*/1000$', '/groups'];
+  const REAL_CONTENT = ['/blog/', '/collections/gifts-under-799', '/products/', '/policies/refund-policy',
+    '/docs/', '/about', '/services/', '/shipping-policy', '/faq', '/case-studies/', '/pricing', '/news/'];
+
+  const noisy = CORRECT_TO_BLOCK.filter(flags);
+  assert(`silent about all ${CORRECT_TO_BLOCK.length} paths a site is right to block`, !noisy.length, `still flags: ${noisy.join(', ')}`);
+  const missed = REAL_CONTENT.filter((path) => !flags(path));
+  assert(`still reports all ${REAL_CONTENT.length} genuine content blocks`, !missed.length, `went silent on: ${missed.join(', ')}`);
 
   const gptOnly = parseRobotsTxt('User-agent: *\nAllow: /\n\nUser-agent: GPTBot\nDisallow: /');
   const gptBlocked = checkBotAccess(context({ robotsTxt: robotsResponse, robots: gptOnly }));
@@ -654,8 +722,14 @@ console.log('\nCheck 3 — structured data, per site type');
     'fail',
   );
 
-  const none = checkStructuredData(context({ keyPages: [page('<html><body><h1>Blue Mug</h1><p>₹499</p></body></html>')] }));
-  assertStatus('store: no Product markup → fail', none, 'fail');
+  // The URL matters now, not just the HTML. A real store's key pages are
+  // product pages; a page at the site root standing in for one would trip the
+  // "we never opened a product page" guard and skip instead of failing, which
+  // would hide the very case this asserts.
+  const none = checkStructuredData(
+    context({ keyPages: [page('<html><body><h1>Blue Mug</h1><p>₹499</p></body></html>', { finalUrl: 'https://shop.test/products/blue-mug' })] }),
+  );
+  assertStatus('store: no Product markup on a real product page → fail', none, 'fail');
   assert('  fix reuses the price scraped off the page', Boolean(none.generatedFix?.includes('"price": "499"')), none.generatedFix ?? '');
   assert('  and names the page it belongs on', none.generatedFixTarget === 'The <head> section of each product page', String(none.generatedFixTarget));
 
@@ -709,7 +783,70 @@ console.log('\nCheck 3 — structured data, per site type');
   );
   assertStatus(
     'store: malformed JSON-LD does not crash the check',
-    checkStructuredData(context({ keyPages: [page('<html><body><script type="application/ld+json">{ "@type": "Product", }</script></body></html>')] })),
+    checkStructuredData(
+      context({
+        keyPages: [
+          page('<html><body><script type="application/ld+json">{ "@type": "Product", }</script></body></html>', {
+            finalUrl: 'https://shop.test/products/blue-mug',
+          }),
+        ],
+      }),
+    ),
+    'fail',
+  );
+
+  /**
+   * A category listing is not a product page.
+   *
+   * themancompany.com scored 0 out of 28 for "no Product markup" and the only
+   * page we opened was /collections/hair. Product schema does not belong on a
+   * listing, so its absence there is not evidence of anything.
+   */
+  assertStatus(
+    'store: only a category page sampled → skipped, not a 28-point fail',
+    checkStructuredData(
+      context({ keyPages: [page('<html><body><h1>Hair</h1></body></html>', { finalUrl: 'https://shop.test/collections/hair' })] }),
+    ),
+    'skipped',
+  );
+  assertStatus(
+    '  but a store with good markup on an unrecognised URL is still judged',
+    checkStructuredData(
+      context({ keyPages: [page(complete, { finalUrl: 'https://shop.test/shop/item-9912' })] }),
+    ),
+    'pass',
+  );
+
+  /**
+   * Where "incomplete" turns into "might as well be absent".
+   *
+   * The threshold used to be a flat count — three or more missing fields failed.
+   * A flat count cannot mean the same thing across profiles that ask for
+   * different numbers of fields: three missing out of four is a shell, three
+   * missing out of nine is a gap. It is proportional now, so the line sits at
+   * "most of the required fields are gone".
+   *
+   * Both assertions matter. The first is the softening; the second is the limit
+   * on it — a store publishing a Product node with no price, no currency, no
+   * stock and no image has the wrapper and none of the facts, and a shopping
+   * assistant can do exactly as much with that as with nothing.
+   */
+  const halfPresent = schemaPage({
+    '@type': 'Product',
+    name: 'Blue Mug',
+    image: 'https://shop.test/mug.jpg',
+    offers: { '@type': 'Offer', price: '499', priceCurrency: 'INR' },
+  });
+  assertStatus(
+    'store: half the fields present → warning, not a total loss',
+    checkStructuredData(context({ keyPages: [page(halfPresent, { finalUrl: 'https://shop.test/products/blue-mug' })] })),
+    'warning',
+  );
+
+  const wrapperOnly = schemaPage({ '@type': 'Product', name: 'Blue Mug', description: 'A mug', sku: 'MUG-1' });
+  assertStatus(
+    '  but a Product node with no price, stock or image still fails',
+    checkStructuredData(context({ keyPages: [page(wrapperOnly, { finalUrl: 'https://shop.test/products/blue-mug' })] })),
     'fail',
   );
 
@@ -856,16 +993,64 @@ console.log('\nCheck 6 — crawlability');
   const dead = (failure: string) => page('', { ok: false, status: null, failure: failure as FetchFailure });
   assert('a domain with no DNS record is not a website', whyNoWebsite(dead('dns')) === 'dns');
   assert('  a refused connection is not either', whyNoWebsite(dead('connection_refused')) === 'unreachable');
-  assert('  nor a transport error', whyNoWebsite(dead('network')) === 'unreachable');
+  // `network` deliberately no longer lands here — see the catch-all note below.
   assert('  nor a timeout', whyNoWebsite(dead('timeout')) === 'timeout');
   assert('  nor a broken certificate', whyNoWebsite(dead('ssl')) === 'ssl');
   assert('  nor a redirect loop', whyNoWebsite(dead('redirect_loop')) === 'redirect_loop');
   assert('  the parking case still routes here', whyNoWebsite(page(parkingPage)) === 'parked');
 
+  /**
+   * Our clock running out is not evidence about their site.
+   *
+   * `deadline_exceeded` means the scan budget was spent, not that the server
+   * failed to answer. Routed to the no-website path it told healthy sites they
+   * did not exist — squeezing the budget to four seconds produced F/0 and "that
+   * can mean the site is down" for codenixlabs.com, which was plainly up. The
+   * genuine `timeout` above still counts, because that one is about them.
+   */
+  assert('our own budget running out is not a dead site', whyNoWebsite(dead('deadline_exceeded')) === null);
+
+  /**
+   * The strongest claim this tool makes must not rest on a catch-all.
+   *
+   * `network` is where every unclassified transport error lands, and routing it
+   * to the no-website verdict meant any hiccup we had not named declared a
+   * domain nonexistent. mastersunion.org — a live business school answering
+   * HTTP 200 with a 4MB homepage — was told "nothing answered at this address",
+   * because the oversize abort fell into that bucket. Saying a website does not
+   * exist should require evidence, not the absence of a better label.
+   */
+  assert('an unclassified network error is not proof of absence', whyNoWebsite(dead('network')) === null);
+  assert('  and a page too large to hold is a finding, not an absence', whyNoWebsite(dead('too_large')) === null);
+  assert('  while a refused connection remains solid evidence', whyNoWebsite(dead('connection_refused')) === 'unreachable');
+
   assert('a healthy page is a website', whyNoWebsite(page(PLAIN_HOMEPAGE)) === null);
   assert(
     '  and so is one that answered but refused us — blocked is a finding, not an absence',
     whyNoWebsite(page('Attention Required! | Cloudflare', { status: 403, ok: false, blocked: true })) === null,
+  );
+
+  /**
+   * Pages we ran out of time to fetch are not broken pages.
+   *
+   * inapp.com was told "5 of 6 sampled pages did not return HTTP 200" and handed
+   * five URLs that work perfectly — the scan budget expired mid-crawl and we
+   * reported our own clock as their outage. The genuine 404 below has to keep
+   * failing, or this fix would hide real broken pages.
+   */
+  const ranOut = page('', { finalUrl: 'https://shop.test/a', ok: false, status: null, failure: 'deadline_exceeded' as FetchFailure });
+  const genuine404 = page('', { finalUrl: 'https://shop.test/b', ok: false, status: 404 });
+  const timedOutPages = checkCrawlability(context({ keyPages: [page(PLAIN_HOMEPAGE, { finalUrl: 'https://shop.test/ok' }), ranOut] }));
+  assert(
+    'pages we ran out of time for are not reported as broken',
+    !timedOutPages.outcome.details.includes('did not return HTTP 200'),
+    timedOutPages.outcome.details,
+  );
+  assert(
+    '  but a real 404 still is',
+    checkCrawlability(context({ keyPages: [page(PLAIN_HOMEPAGE, { finalUrl: 'https://shop.test/ok' }), genuine404] })).outcome.details.includes(
+      'did not return HTTP 200',
+    ),
   );
 
   const spa = checkCrawlability(context({ homepage: page('<html><body><div id="root"></div><script src="/app.js"></script></body></html>') }));
@@ -914,6 +1099,82 @@ console.log('\nCheck 6 — crawlability');
   );
 }
 
+// --- Microdata and RDFa -----------------------------------------------------
+
+console.log('\nMicrodata and RDFa');
+{
+  /**
+   * schema.org has three notations and we read one.
+   *
+   * google.com and semrush.com both publish microdata, and both scored zero on
+   * structured data — marked down for the format they chose, not for anything
+   * they left out. The parser is shallow on purpose: the checks only ever ask
+   * what type a node is and whether it carries a handful of named properties.
+   */
+  const micro = page(
+    '<html><body><div itemscope itemtype="https://schema.org/Product">' +
+      '<h1 itemprop="name">Blue Mug</h1>' +
+      '<img itemprop="image" src="/mug.jpg">' +
+      '<div itemprop="offers" itemscope itemtype="https://schema.org/Offer">' +
+      '<meta itemprop="price" content="499"><meta itemprop="priceCurrency" content="INR">' +
+      '</div></div></body></html>',
+    { finalUrl: 'https://shop.test/products/blue-mug' },
+  );
+  const microTypes = micro.jsonLd().flatMap((node) => typesOf(node));
+  assert('microdata itemtype is read as a schema node', microTypes.includes('product'), microTypes.join(','));
+
+  const node = micro.jsonLd().find((n) => typesOf(n).includes('product'))!;
+  assert('  itemprop text becomes a value', node.name === 'Blue Mug', String(node.name));
+  assert('  a src attribute is preferred over element text', node.image === '/mug.jpg', String(node.image));
+  assert(
+    '  a nested scope is recorded as its own type, not flattened into the parent',
+    (node.offers as Record<string, unknown>)?.['@type'] === 'Offer',
+    JSON.stringify(node.offers),
+  );
+
+  const rdfa = page(
+    '<html><body vocab="https://schema.org/"><div typeof="Organization">' +
+      '<span property="name">Codenix Labs</span><meta property="telephone" content="+91-8488080162">' +
+      '</div></body></html>',
+  );
+  const rdfaNode = rdfa.jsonLd().find((n) => typesOf(n).includes('organization'));
+  assert('RDFa typeof under a schema.org vocab is read', Boolean(rdfaNode), JSON.stringify(rdfa.jsonLd()));
+  assert('  and its properties come through', rdfaNode?.name === 'Codenix Labs', String(rdfaNode?.name));
+
+  /**
+   * The limit that keeps this honest. `typeof` is an ordinary word in plenty of
+   * templating output and RDFa vocabularies other than schema.org exist; without
+   * the vocab guard we would invent schema nodes that nobody published.
+   */
+  const notSchema = page('<html><body><div typeof="foaf:Person"><span property="name">Someone</span></div></body></html>');
+  assert('  a typeof outside schema.org is not counted', notSchema.jsonLd().length === 0, JSON.stringify(notSchema.jsonLd()));
+
+  const plain = page(PLAIN_HOMEPAGE);
+  assert('  and an ordinary page still yields nothing', plain.jsonLd().length === 0, JSON.stringify(plain.jsonLd()));
+}
+
+// --- Deadline ---------------------------------------------------------------
+
+console.log('\nDeadline');
+{
+  /**
+   * The reserve is what keeps a fifteen-second promise honest.
+   *
+   * Seven stored scans overran the ceiling and one took 25 seconds, every one of
+   * them recorded as complete. Loading a real homepage into cheerio and walking
+   * it for text, JSON-LD and links costs around 500ms at the heavy end, so six
+   * or seven pages need roughly three seconds the network budget must not have
+   * already spent.
+   */
+  assert(
+    'a 15s scan reserves time to parse, not only to fetch',
+    new Deadline(15000).remainingMs() <= 15000 - Deadline.PROCESSING_RESERVE_MS,
+    String(new Deadline(15000).remainingMs()),
+  );
+  assert('  and the reserve is big enough for six heavy pages', Deadline.PROCESSING_RESERVE_MS >= 3000);
+  assert('  a tiny budget still leaves a usable floor rather than zero', new Deadline(500).remainingMs() >= 1000);
+}
+
 // --- Scoring --------------------------------------------------------------
 
 console.log('\nScoring');
@@ -923,29 +1184,59 @@ console.log('\nScoring');
 
   const ids = ['bot_access', 'agent_interface', 'structured_data', 'content_structure', 'trust_signals', 'meta_robots', 'crawlability'];
   const allPass = ids.map((id) => scoreCheck(outcome(id, 'pass'), 'ecommerce'));
-  const perfect = totalScore(allPass);
-  assert('all pass → 100 / grade A', perfect.score === 100 && perfect.grade === 'A', JSON.stringify(perfect));
+  /**
+   * A flawless site tops out at 95, not 100.
+   *
+   * The five points are not a penalty — they belong to what a crawl structurally
+   * cannot see: whether an assistant actually cites you, anything that needs
+   * JavaScript to appear, the pages beyond the five we sample, and the further
+   * signals Phase 1 does not run. Publishing a perfect hundred would claim we
+   * had checked all of that.
+   */
+  const perfect = totalScore(allPass, 'ecommerce');
+  assert('all pass → 95, never 100 / grade A', perfect.score === SCAN_CEILING && perfect.grade === 'A', JSON.stringify(perfect));
 
   const allFail = allPass.map((check) => ({ ...check, status: 'fail' as CheckStatus, pointsAwarded: 0 }));
-  assert('all fail → 0 / grade F', totalScore(allFail).score === 0 && totalScore(allFail).grade === 'F');
+  assert('all fail → 0 / grade F', totalScore(allFail, 'ecommerce').score === 0 && totalScore(allFail, 'ecommerce').grade === 'F');
 
-  // Warning is half credit: 20/2 + 15 + 30 + 15 + 10 + 10 = 90 → A.
+  /**
+   * Warning is half credit: 90% of the points earned → 86 on the 95 scale.
+   *
+   * The grade is still A, and that is the point of the second assertion. The
+   * letter is derived from the percentage earned, never from the scaled number —
+   * deriving it from the number would drag every boundary down five points and
+   * quietly re-grade every site on the strength of a presentation change.
+   */
   const oneWarning = [scoreCheck(outcome('bot_access', 'warning'), 'ecommerce'), ...allPass.slice(1)];
-  assert('one warning on the 20-point check → 90', totalScore(oneWarning).score === 90, String(totalScore(oneWarning).score));
+  const warned90 = totalScore(oneWarning, 'ecommerce');
+  assert('90% of the points → 86 on the 95 scale', warned90.score === 86, String(warned90.score));
+  assert('  and still grade A — the bands did not move', warned90.grade === 'A', warned90.grade);
 
-  // Skipping the 30-point check must not cap the score at 70.
+  /**
+   * Two rules pulling opposite ways, and both have to hold.
+   *
+   * A skipped check must not be scored as zero — that would charge a site for
+   * our blind spot, and it is why the total is normalised at all. But excluding
+   * it entirely let flipkart.com, which blocks our scanner out of the heaviest
+   * check, come out A/100: a top grade off roughly seventy per cent of an
+   * examination. An A claims we looked at everything.
+   *
+   * So: still not zero, still not an A.
+   */
   const skipped = [...allPass.slice(0, 2), scoreCheck(outcome('structured_data', 'skipped'), 'ecommerce'), ...allPass.slice(3)];
-  const normalised = totalScore(skipped);
-  assert('a skipped check is normalised out, not scored as zero', normalised.score === 100 && normalised.normalised, JSON.stringify(normalised));
+  const normalised = totalScore(skipped, 'ecommerce');
+  assert('a skipped check is normalised out, not scored as zero', normalised.score > 70 && normalised.normalised, JSON.stringify(normalised));
+  assert('  but an incomplete examination cannot earn an A', normalised.grade === 'B', JSON.stringify(normalised));
+  assert('  and the number is capped to match the letter', normalised.score < 90, String(normalised.score));
 
   // The same failing check costs a different amount depending on the site type.
   const blogFailsIndexing = ids.map((id) => scoreCheck(outcome(id, id === 'meta_robots' ? 'fail' : 'pass'), 'content'));
   const storeFailsIndexing = ids.map((id) => scoreCheck(outcome(id, id === 'meta_robots' ? 'fail' : 'pass'), 'ecommerce'));
   assert(
     'a noindex costs a blog more than a store — being unindexable is fatal for a publication',
-    totalScore(blogFailsIndexing).score < totalScore(storeFailsIndexing).score &&
+    totalScore(blogFailsIndexing, 'content').score < totalScore(storeFailsIndexing, 'ecommerce').score &&
       weightsFor('content').meta_robots > weightsFor('ecommerce').meta_robots,
-    `${totalScore(blogFailsIndexing).score} vs ${totalScore(storeFailsIndexing).score}`,
+    `${totalScore(blogFailsIndexing, 'content').score} vs ${totalScore(storeFailsIndexing, 'ecommerce').score}`,
   );
 
   assert('grade boundaries', toGrade(90) === 'A' && toGrade(89) === 'B' && toGrade(75) === 'B' && toGrade(74) === 'C' && toGrade(60) === 'C' && toGrade(59) === 'D' && toGrade(40) === 'D' && toGrade(39) === 'F');

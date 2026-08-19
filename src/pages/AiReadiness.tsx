@@ -142,7 +142,7 @@ const AiReadiness: React.FC = () => {
         <title>Free AI Readiness Checker — Can ChatGPT Find Your Website? | Codenix Labs</title>
         <meta
           name="description"
-          content="Free instant check: can ChatGPT, Claude, Gemini and Perplexity read, understand and recommend your website? Get an A–F score in 15 seconds, plus the exact code to fix what is broken."
+          content="Free instant check: can ChatGPT, Claude, Gemini and Perplexity read, understand and recommend your website? Get an A–F score in 20 seconds, plus the exact code to fix what is broken."
         />
         <link rel="canonical" href="https://www.codenixlabs.com/ai-readiness" />
       </Helmet>
@@ -179,7 +179,7 @@ const AiReadiness: React.FC = () => {
               className="max-w-2xl mx-auto mt-6 text-lg leading-relaxed text-neutral-300"
             >
               More people ask ChatGPT, Claude, Gemini and Perplexity for recommendations than search for them. Paste your
-              address and see whether those assistants can read, understand and recommend you — in about fifteen seconds.
+              address and see whether those assistants can read, understand and recommend you — in under twenty seconds.
             </motion.p>
 
             <motion.div

@@ -29,6 +29,15 @@ export class HtmlDocument {
   readonly headers: Record<string, string>;
   /** Wall-clock time for the whole request — the crawl-budget signal. */
   readonly durationMs: number;
+  /**
+   * The page was longer than we would hold and we stopped reading it.
+   *
+   * Carried through to the report rather than kept internal: a reader told we
+   * saw the first 5MB can judge our heading and link counts accordingly, and a
+   * page that heavy is a real risk of being abandoned part-read by the very
+   * assistants this tool is about.
+   */
+  readonly truncated: boolean;
   readonly $: cheerio.CheerioAPI | null;
 
   private cachedText: string | null = null;
@@ -43,6 +52,7 @@ export class HtmlDocument {
     this.failure = fetched.failure;
     this.headers = fetched.headers;
     this.durationMs = fetched.durationMs;
+    this.truncated = fetched.truncated;
 
     const isHtml = !fetched.contentType || /html|xml|text\/plain/i.test(fetched.contentType);
     this.$ = fetched.body && isHtml ? cheerio.load(fetched.body) : null;
@@ -134,6 +144,8 @@ export class HtmlDocument {
       }
     });
 
+    collectMicrodata($, nodes);
+
     this.cachedJsonLd = nodes;
     return nodes;
   }
@@ -187,6 +199,83 @@ export class HtmlDocument {
     });
     return found;
   }
+}
+
+/**
+ * schema.org written as HTML attributes rather than a JSON block.
+ *
+ * There are three ways to publish this data — JSON-LD, microdata and RDFa — and
+ * we read one of them. That is not an obscure gap: google.com and semrush.com
+ * both publish microdata, and both scored zero on our structured-data check
+ * because of the format they chose rather than anything they got wrong. Roughly
+ * one site in seven in the stored scans is affected, and the older platforms
+ * that still emit microdata are exactly the small businesses this tool is for.
+ *
+ * Deliberately a shallow read. Full microdata resolution has rules about
+ * itemref, itemid and nested scopes that nothing here needs — the checks ask
+ * "what type is this, and does it carry name/price/address", so lifting the
+ * type and its direct itemprop values answers every question we actually put to
+ * it. A half-correct parser that quietly reported the wrong fields would be
+ * worse than none; this one either finds a property or does not.
+ */
+function collectMicrodata($: cheerio.CheerioAPI, out: Record<string, unknown>[]): void {
+  $('[itemtype]').each((_, element) => {
+    const itemtype = ($(element).attr('itemtype') || '').trim();
+    const match = /schema\.org\/(\w+)/i.exec(itemtype);
+    if (!match) return;
+
+    const node: Record<string, unknown> = { '@type': match[1] };
+
+    $(element)
+      .find('[itemprop]')
+      .each((__, prop) => {
+        const name = ($(prop).attr('itemprop') || '').trim();
+        if (!name || name in node) return;
+
+        // A nested item is its own scope; record that it exists and what it is,
+        // rather than flattening its children up into the parent.
+        const nested = $(prop).attr('itemtype');
+        if (nested) {
+          const nestedType = /schema\.org\/(\w+)/i.exec(nested);
+          if (nestedType) node[name] = { '@type': nestedType[1] };
+          return;
+        }
+
+        const value =
+          $(prop).attr('content') ||
+          $(prop).attr('href') ||
+          $(prop).attr('src') ||
+          $(prop).attr('datetime') ||
+          $(prop).text().replace(/\s+/g, ' ').trim();
+
+        if (value) node[name] = value;
+      });
+
+    out.push(node);
+  });
+
+  // RDFa Lite: same information, `typeof` and `property` instead.
+  $('[typeof]').each((_, element) => {
+    const declared = ($(element).attr('typeof') || '').trim();
+    if (!declared) return;
+
+    const vocab = ($(element).attr('vocab') || $(element).closest('[vocab]').attr('vocab') || '').toLowerCase();
+    const prefixed = /^schema:/i.test(declared);
+    if (!prefixed && !vocab.includes('schema.org')) return;
+
+    const node: Record<string, unknown> = { '@type': declared.replace(/^schema:/i, '') };
+
+    $(element)
+      .find('[property]')
+      .each((__, prop) => {
+        const name = ($(prop).attr('property') || '').replace(/^schema:/i, '').trim();
+        if (!name || name in node) return;
+        const value = $(prop).attr('content') || $(prop).attr('href') || $(prop).text().replace(/\s+/g, ' ').trim();
+        if (value) node[name] = value;
+      });
+
+    out.push(node);
+  });
 }
 
 function collectNodes(value: unknown, out: Record<string, unknown>[], depth = 0): void {

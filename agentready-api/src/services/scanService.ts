@@ -2,7 +2,7 @@ import { config } from '../config';
 import { CheckId, CheckStatus, SiteType } from '../types';
 import { Scan, ScanDoc } from '../models/Scan';
 import { runScan } from './scanEngine';
-import { SCORING_VERSION, countBlockers, weightsFor } from './scoring';
+import { SCAN_CEILING, SCORING_VERSION, countBlockers, weightsFor } from './scoring';
 import { normalizeUrl } from '../utils/url';
 
 /**
@@ -346,7 +346,11 @@ function auditTrail(scan: ScanDoc): Record<string, unknown> {
     // cannot tell a stale report from a fresh one, and would have no reason to
     // look for the button that forces a new crawl.
     cacheHours: config.scanner.cacheHours,
-    method: 'Static HTML only — no JavaScript is executed. Checks that could not be verified are excluded from the score rather than counted as zero.',
+    method:
+      'Static HTML only — no JavaScript is executed. Checks that could not be verified are excluded from the score rather than counted as zero, ' +
+      `and a scan cannot award more than ${SCAN_CEILING} of 100: the remaining points belong to what a crawl cannot see — whether an assistant actually cites you, ` +
+      'content that only appears once JavaScript runs, the pages beyond the handful we sample, and the further signals this phase does not test. ' +
+      'When part of the assessment could not run at all, the grade is capped at B, because an A would claim we had looked at everything.',
   };
 }
 

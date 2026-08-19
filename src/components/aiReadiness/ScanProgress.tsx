@@ -91,7 +91,7 @@ export const ScanProgress: React.FC<{ url?: string }> = ({ url }) => {
       </ol>
 
       <p className="pt-4 mt-5 text-xs leading-relaxed border-t text-neutral-500 border-white/10">
-        About fifteen requests in fifteen seconds. Most of the wait is your server answering, not us thinking.
+        About twenty requests in under twenty seconds. Most of the wait is your server answering, not us thinking.
       </p>
     </motion.div>
   );

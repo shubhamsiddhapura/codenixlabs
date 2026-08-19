@@ -8,6 +8,15 @@ export type FetchFailure =
   | 'redirect_loop'
   | 'connection_refused'
   | 'network'
+  /**
+   * The page came back, but it is larger than we will hold in memory.
+   *
+   * A finding about the page, never an absence of one. mastersunion.org serves a
+   * 4MB homepage against our 3MB cap; axios aborted, the error fell into the
+   * `network` catch-all, and a live business school was told "nothing answered
+   * at this address — no server accepted the connection".
+   */
+  | 'too_large'
   | 'deadline_exceeded';
 
 export interface FetchResult {
@@ -22,11 +31,24 @@ export interface FetchResult {
   /** Set when no usable response came back at all. */
   failure: FetchFailure | null;
   /**
-   * True when the server answered but refused us: 401/403/429, or a Cloudflare
+   * True when the server answered but refused us: 401/403, or a Cloudflare
    * style interstitial. Distinct from `failure` — the site is up, it just does
    * not want a bot. Spec section 8 wants this reported as its own result.
    */
   blocked: boolean;
+  /**
+   * The server asked us to slow down (429, or 503 with Retry-After).
+   *
+   * Deliberately not `blocked`. See looksRateLimited — a rate limit says
+   * something about how fast we asked, never about whether the visitor is
+   * welcome, and conflating the two invented crawler blocks that did not exist.
+   */
+  rateLimited: boolean;
+  /**
+   * True when the page was longer than we were willing to hold and we stopped
+   * reading. The content we did read is real; there is simply more of it.
+   */
+  truncated: boolean;
   durationMs: number;
 }
 
@@ -43,11 +65,23 @@ export class Deadline {
 
   /**
    * Held back from the network budget for parsing, scoring and building the
-   * report. Without it the fetches alone can consume the entire ceiling and the
-   * scan finishes *after* the time we promised — parsing six pages of HTML is
-   * not free.
+   * report. Without it the fetches alone consume the entire ceiling and the scan
+   * finishes *after* the time we promised — parsing six pages of HTML is not
+   * free.
+   *
+   * Raised from 1500ms on measurement rather than instinct. Loading a real
+   * homepage into cheerio and walking it for text, JSON-LD and links costs
+   * around 500ms on the heavy end — themancompany.com ships 1.9MB and takes
+   * 282ms to parse plus 236ms to walk. Six or seven of those is roughly three
+   * seconds, so a 1500ms reserve was short by half and the overrun landed
+   * outside the promised fifteen: that scan finished in 17.8 seconds.
+   *
+   * It costs network budget, which is a real trade — fewer pages get fetched on
+   * a slow host. That is the right way round. A scan that samples one page fewer
+   * says so in the report; a scan that runs three seconds long silently breaks
+   * the only promise we make about it.
    */
-  static readonly PROCESSING_RESERVE_MS = 1500;
+  static readonly PROCESSING_RESERVE_MS = 3000;
 
   constructor(totalMs: number = config.scanner.totalTimeoutMs) {
     this.endsAt = Date.now() + Math.max(1000, totalMs - Deadline.PROCESSING_RESERVE_MS);
@@ -64,7 +98,33 @@ export class Deadline {
   }
 }
 
-const MAX_BODY_BYTES = 3 * 1024 * 1024;
+/**
+ * How much of a page we will hold in memory.
+ *
+ * Raised from 3MB once the probes stopped downloading whole pages — see
+ * PROBE_BODY_BYTES. mastersunion.org serves 3.87MB, so 3MB was cutting real
+ * sites in half for the sake of a limit that eleven redundant copies of the
+ * homepage were the actual reason for.
+ *
+ * It is a ceiling, not a target, and there will always be a page above it. That
+ * is why the reader truncates rather than failing: the cap decides how much we
+ * keep, never whether the scan works.
+ */
+const MAX_BODY_BYTES = 5 * 1024 * 1024;
+
+/**
+ * How much of a page a *crawler probe* keeps.
+ *
+ * These eleven requests exist to learn one thing — did the server serve this
+ * crawler, yes or no — and that is the status code. We were downloading the
+ * entire homepage eleven times to read one number: 44MB of transfer on a 4MB
+ * page, per scan, most of it the binding reason the cap had to stay low.
+ *
+ * 64KB is far more than the check needs. `looksChallenged` reads the first 4000
+ * characters to spot a Cloudflare interstitial, and nothing else touches a probe
+ * body.
+ */
+const PROBE_BODY_BYTES = 64 * 1024;
 
 const CHALLENGE_MARKERS = [
   'just a moment...',
@@ -77,6 +137,20 @@ const CHALLENGE_MARKERS = [
   'pardon our interruption',
 ];
 
+/** Node's TLS verification failures, as reported through axios's `code`. */
+const CERT_ERRORS = new Set([
+  'CERT_HAS_EXPIRED',
+  'CERT_NOT_YET_VALID',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+  'HOSTNAME_MISMATCH',
+  'CERT_UNTRUSTED',
+]);
+
 function classifyAxiosError(error: AxiosError): FetchFailure {
   const code = error.code || '';
   // ERR_CANCELED is what the deadline's AbortSignal produces, and
@@ -86,10 +160,55 @@ function classifyAxiosError(error: AxiosError): FetchFailure {
   if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return 'dns';
   if (code === 'ECONNREFUSED') return 'connection_refused';
   if (code === 'ERR_FR_TOO_MANY_REDIRECTS') return 'redirect_loop';
-  if (code.startsWith('ERR_TLS') || code === 'CERT_HAS_EXPIRED' || code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
+  /**
+   * The full set of certificate failures, not the three we happened to think of.
+   *
+   * clude.ai fails with UNABLE_TO_GET_ISSUER_CERT_LOCALLY — an incomplete chain,
+   * where the server sends its own certificate but not the intermediate that
+   * proves it. That was falling through to `network`, so the owner was told
+   * "no server accepted the connection" when the server accepted it fine and the
+   * problem was one missing file in their TLS config. Wrong diagnosis, wrong
+   * person to call: hosting support rather than the certificate provider.
+   */
+  if (code.startsWith('ERR_TLS') || code.startsWith('ERR_SSL') || CERT_ERRORS.has(code)) {
     return 'ssl';
   }
+  // axios reports the maxContentLength abort through a couple of different
+  // codes depending on version and transport, so match the message too.
+  if (code === 'ERR_FR_MAX_CONTENT_LENGTH_EXCEEDED' || /maxContentLength/i.test(error.message || '')) {
+    return 'too_large';
+  }
   return 'network';
+}
+
+/**
+ * Read at most MAX_BODY_BYTES from a response stream, then stop.
+ *
+ * Truncating mid-document is safe: cheerio's parser is built for broken HTML and
+ * closes what it finds open. Everything the checks read — title, meta, JSON-LD,
+ * headings, navigation — lives near the top of a document, while the tail of a
+ * page this size is inlined CSS and base64 images no check ever looks at.
+ */
+async function readCapped(stream: NodeJS.ReadableStream, limit: number): Promise<{ body: string; truncated: boolean }> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  let truncated = false;
+
+  for await (const chunk of stream) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
+    chunks.push(buffer);
+    total += buffer.length;
+    if (total >= limit) {
+      truncated = true;
+      break;
+    }
+  }
+
+  // Stop the download rather than letting the rest arrive unread — on a 4MB page
+  // that is a megabyte of someone's bandwidth we have no use for.
+  (stream as unknown as { destroy?: () => void }).destroy?.();
+
+  return { body: Buffer.concat(chunks).subarray(0, limit).toString('utf8'), truncated };
 }
 
 function headersOf(response: AxiosResponse): Record<string, string> {
@@ -103,13 +222,43 @@ function headersOf(response: AxiosResponse): Record<string, string> {
 }
 
 function looksChallenged(status: number, body: string | null): boolean {
-  if (status === 401 || status === 403 || status === 429) return true;
+  if (status === 401 || status === 403) return true;
   if (status !== 503 || !body) return false;
   const head = body.slice(0, 4000).toLowerCase();
   return CHALLENGE_MARKERS.some((marker) => head.includes(marker));
 }
 
+/**
+ * Told to slow down — not turned away.
+ *
+ * 429 used to be lumped in with 401 and 403 as `blocked`, and that one line cost
+ * sites up to 25 points for something they never did. We ask for the homepage as
+ * eleven different crawlers; plenty of servers answer the first and rate-limit
+ * the rest. We were then reporting our own burst back to the owner as
+ * "your server refuses AI crawlers" — proven on mrisoftware.com, where the first
+ * Amazonbot request returned 200 and the next two returned 429.
+ *
+ * A rate limit is a statement about request volume, not about identity. It tells
+ * us nothing about whether the real crawler is welcome, so the only honest thing
+ * to do is record that we could not find out.
+ *
+ * 503 with a Retry-After header is the same message in a different envelope —
+ * but a 503 *without* one is kept out, because that is where CDN challenge pages
+ * live and `looksChallenged` needs to keep seeing them.
+ */
+function looksRateLimited(status: number, headers: Record<string, string>): boolean {
+  if (status === 429) return true;
+  return status === 503 && Boolean(headers['retry-after']);
+}
+
 export interface FetchOptions {
+  /**
+   * Keep at most this many bytes of the body.
+   *
+   * Defaults to MAX_BODY_BYTES. Callers that only need the status code pass
+   * something far smaller rather than paying for a page they will not read.
+   */
+  maxBytes?: number;
   /**
    * Identify as a different crawler for this request.
    *
@@ -126,6 +275,8 @@ export interface FetchOptions {
  * Fetch a URL within the scan's remaining budget. Never throws — every failure
  * mode is reported in the result, because a failed fetch is itself a finding.
  */
+export { PROBE_BODY_BYTES };
+
 export async function fetchUrl(url: string, deadline: Deadline, options: FetchOptions = {}): Promise<FetchResult> {
   const startedAt = Date.now();
 
@@ -139,6 +290,8 @@ export async function fetchUrl(url: string, deadline: Deadline, options: FetchOp
     contentType: null,
     failure: null,
     blocked: false,
+    rateLimited: false,
+    truncated: false,
     durationMs: 0,
   };
 
@@ -160,8 +313,22 @@ export async function fetchUrl(url: string, deadline: Deadline, options: FetchOp
        */
       signal: AbortSignal.timeout(timeout),
       maxRedirects: 5,
-      maxContentLength: MAX_BODY_BYTES,
-      responseType: 'text',
+      /**
+       * We police the size ourselves, so axios must not.
+       *
+       * `maxContentLength` aborts the whole request and throws once the body
+       * passes the cap, which returns *nothing at all*. mastersunion.org serves
+       * a 4MB homepage; we threw away the 3MB we had already received, and a
+       * live business school was told nothing answered at that address. Asking
+       * the server for a Range instead was no better — that one ignores the
+       * header and sends the lot again.
+       *
+       * Reading the stream and stopping when we have enough depends on nothing
+       * the server chooses to support.
+       */
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      responseType: 'stream',
       // We inspect non-2xx bodies (a 403 challenge page, a 404 .well-known),
       // so never let axios turn a status code into an exception.
       validateStatus: () => true,
@@ -171,26 +338,48 @@ export async function fetchUrl(url: string, deadline: Deadline, options: FetchOp
         Accept: 'text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-IN,en;q=0.9',
       },
-      transformResponse: [(data) => data],
     });
 
     const headers = headersOf(response);
-    const body = typeof response.data === 'string' ? response.data : String(response.data ?? '');
+    const { body, truncated } = await readCapped(response.data as unknown as NodeJS.ReadableStream, options.maxBytes ?? MAX_BODY_BYTES);
     const status = response.status;
 
     return {
       ...base,
       finalUrl: (response.request?.res?.responseUrl as string | undefined) || url,
       status,
+      // 206 lands inside this range already — a partial body is exactly what the
+      // oversize retry asked for, and every check reads the head of the document.
       ok: status >= 200 && status < 300,
       headers,
       body,
       contentType: headers['content-type'] || null,
       blocked: looksChallenged(status, body),
+      truncated,
+      rateLimited: looksRateLimited(status, headers),
       durationMs: Date.now() - startedAt,
     };
   } catch (error) {
-    const failure = axios.isAxiosError(error) ? classifyAxiosError(error) : 'network';
+    const classified = axios.isAxiosError(error) ? classifyAxiosError(error) : 'network';
+
+    /**
+     * Whose clock ran out — theirs or ours?
+     *
+     * The effective timeout is `min(requestTimeoutMs, time left in the scan)`.
+     * When the deadline is what clamped it, a timeout says nothing about the
+     * site: it says we ran out of budget while asking. Reported as `timeout`,
+     * that became "this site did not respond in time" and — because the
+     * no-website check treats a timeout as a dead domain — a perfectly healthy
+     * site could be told it does not exist. Reproduced by squeezing the budget
+     * to four seconds: codenixlabs.com, which is plainly up, came back F/0 with
+     * "that can mean the site is down".
+     *
+     * Same mistake as reading a 429 as a refusal. A limit we imposed is not
+     * evidence about them.
+     */
+    const ourClockRanOut = classified === 'timeout' && timeout < config.scanner.requestTimeoutMs;
+    const failure = ourClockRanOut ? 'deadline_exceeded' : classified;
+
     return { ...base, failure, durationMs: Date.now() - startedAt };
   }
 }

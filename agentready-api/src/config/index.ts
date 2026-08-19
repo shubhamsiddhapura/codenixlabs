@@ -49,7 +49,16 @@ export const config = {
      * so a slow site degrades into a partial result instead of hanging the
      * request. Spec section 8.
      */
-    totalTimeoutMs: num(process.env.SCAN_TOTAL_TIMEOUT_MS, 15000),
+    /**
+     * Raised from 15s on evidence. Re-scanning 91 stored domains left 24 of them
+     * marked partial — a quarter of reports carrying "we ran out of time", which
+     * trains people to ignore the caveat rather than read it. Real sites like
+     * semrush.com and nexdigm.com genuinely need 12 seconds of network time.
+     *
+     * The number is a promise made on the homepage and in outreach, so changing
+     * it means changing that copy too — it is not a free dial to turn.
+     */
+    totalTimeoutMs: num(process.env.SCAN_TOTAL_TIMEOUT_MS, 20000),
     requestTimeoutMs: num(process.env.SCAN_REQUEST_TIMEOUT_MS, 10000),
     cacheHours: num(process.env.SCAN_CACHE_HOURS, 1),
     rateLimitPerHour: num(process.env.SCAN_RATE_LIMIT_PER_HOUR, 5),

@@ -43,7 +43,7 @@ export const AiReadinessBand: React.FC = () => {
             <div className="max-w-3xl">
               <span className="inline-flex items-center gap-2 px-4 py-2 mb-6 text-xs font-semibold tracking-wider uppercase border rounded-full border-accent/40 bg-accent/10 text-accent">
                 <Sparkles size={14} aria-hidden="true" />
-                Free tool · Live in 15 seconds
+                Free tool · Live in 20 seconds
               </span>
 
               <h2 className="text-3xl font-bold leading-tight text-white font-orbitron sm:text-4xl lg:text-5xl">
@@ -54,7 +54,7 @@ export const AiReadinessBand: React.FC = () => {
 
               <p className="mt-5 text-lg leading-relaxed text-neutral-300">
                 Most AI assistants cannot run JavaScript. If your site builds itself in the browser, they see a blank page —
-                and recommend someone else. Paste your address and find out in fifteen seconds, free.
+                and recommend someone else. Paste your address and find out in under twenty seconds, free.
               </p>
             </div>
 
