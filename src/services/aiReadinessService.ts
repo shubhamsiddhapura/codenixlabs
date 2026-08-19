@@ -69,7 +69,7 @@ function fallbackMessage(status: number): string {
 }
 
 /**
- * Runs the scan. Can take up to ~15 seconds on a slow site.
+ * Runs the scan. Can take up to ~20 seconds on a slow site.
  *
  * `siteType` skips detection and judges the site as that type — how a visitor
  * corrects a low-confidence classification instead of reading a report built on

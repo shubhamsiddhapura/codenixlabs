@@ -1,4 +1,4 @@
-import { AgentAccessRow, CheckOutcome } from '../../types';
+import { AgentAccessRow, CheckOutcome, SiteType } from '../../types';
 import { ScanContext } from '../scanContext';
 import { RobotsRule, isAllowed } from '../robotsTxt';
 import { pathOf } from '../../utils/url';
@@ -183,27 +183,101 @@ const HOUSEKEEPING_RULES: RegExp[] = [
   // would cost nearly every React, Next.js or Vite site points for doing the
   // correct thing.
   new RegExp(
-    `${SEGMENT}\\*?(api|_next|_nuxt|_vercel|_astro|static|assets|build|dist|cgi-bin|node_modules|a/downloads|sf_|cdn/|apps|services|recommendations|\\.well-known|apple-app-site-association|wp-admin|wp-includes|wp-content|wp-json|xmlrpc)`,
+    // `services` is deliberately absent here — see PLATFORM_ONLY_RULES below.
+    `${SEGMENT}\\*?(api|_next|_nuxt|_vercel|_astro|static|assets|build|dist|cgi-bin|node_modules|a/downloads|sf_|cdn/|apps|recommendations|\\.well-known|apple-app-site-association|wp-admin|wp-includes|wp-content|wp-json|xmlrpc)`,
     'i',
   ),
   // Shopify's remote-SKU variants: literal character classes in the path.
   /\[a-f0-9\]/i,
   // Numeric store-id prefixed routes, e.g. "/13080907/checkouts".
   /^\/\d{4,}(\/|$)/,
+
+  /**
+   * Everything below came from reading what we actually complained about.
+   *
+   * Across 23 warnings in the stored scans, roughly forty distinct paths were
+   * flagged and almost none of them were content. The worst example: we warned a
+   * site for disallowing `/.git/` — blocking that is a security necessity, and
+   * telling someone off for it makes the whole report look uninformed. The rest
+   * were admin screens, auth callbacks, logged-in user areas, error pages and
+   * internal endpoints. A warning that is wrong ninety per cent of the time is
+   * not a warning, it is noise that costs the reader trust in everything else.
+   */
+
+  // Source control, secrets and server plumbing. Blocking these is correct and
+  // sometimes the only thing standing between a site and a breach.
+  new RegExp(`${SEGMENT}(\\.git|\\.svn|\\.hg|\\.env|\\.ssh|\\.docker|vendor|composer)${SEGMENT_END}`, 'i'),
+
+  // Admin and monitoring surfaces beyond the WordPress ones already listed.
+  new RegExp(`${SEGMENT}\\*?(django[-_]?admin|adminer|phpmyadmin|dashboard|analytics|munin|nagios|grafana|metrics|status|health)${SEGMENT_END}`, 'i'),
+
+  // Anything behind a login. Nobody publishes these and no assistant can read
+  // them, so a rule keeping crawlers out is housekeeping by definition.
+  new RegExp(
+    `${SEGMENT}\\*?(oauth|auth|sso|signin|sign[-_]?in|signup|sign[-_]?up|preauthorize|confirm|verify|invites?|notifications?|groups|profile|settings|preferences|setprefs|my[-_]\\w+|u|users?|members?|portal|billing|subscriptions?)${SEGMENT_END}`,
+    'i',
+  ),
+
+  // Error, utility and deliberately-unpublished pages. `coming-soon` and
+  // `private-page` are the site telling us in words that it does not want these
+  // read; repeating it back as a finding is absurd.
+  new RegExp(
+    `${SEGMENT}\\*?(40[0-9]|41[0-9]|50[0-9]|error|old[-_]browser|coming[-_]soon|private|hidden|draft|drafts|staging|sandbox|thank[-_]?you|unsubscribe)${SEGMENT_END}`,
+    'i',
+  ),
+
+  // Machine endpoints and generated files — feeds, downloads, media handlers and
+  // anything with a script or data extension on the end. None of it is a page.
+  new RegExp(`${SEGMENT}\\*?(feeds?|rss|atom|get[-_]\\w+|file[-_]download|downloads?|imgres|sdch|channel[-_]picker|embed|oembed|amp|print)${SEGMENT_END}`, 'i'),
+  /\.(php|aspx?|jsp|cgi|xml|json|rss|atom|txt|csv|zip|gz|pdf|sql)(\?|$)/i,
+
+  // Paths made only of wildcards, digits and anchors — "/*/1000$", "/bitria100".
+  // These are pagination and id guards; there is no readable page behind a
+  // pattern with no words in it.
+  /^[/*\d$_-]+$/,
+  new RegExp(`${SEGMENT}\\*?[a-z]{2,}\\d{2,}${SEGMENT_END}`, 'i'),
+
+  // Locale and device duplicates of content that exists elsewhere. Blocking the
+  // duplicate is the recommended way to avoid competing with yourself.
+  new RegExp(`${SEGMENT}(m|amp|mobile|country|region|partner|partners)${SEGMENT_END}`, 'i'),
 ];
 
 /**
- * Multi-market stores repeat every rule with a locale wildcard in front
- * ("/*​/cart/", "*​/collections/..."). Strip that prefix before matching, or the
- * localised copy of a housekeeping rule reads as a content block.
+ * Housekeeping only on the platform that generates it.
+ *
+ * Shopify ships `Disallow: /services/login_with_shop` and `/services` in its
+ * default robots.txt, so on a store that path is plumbing. On a clinic, an
+ * agency or a consultancy, `/services/` is the page describing what they do —
+ * usually the most important page they have, and exactly what someone asks an
+ * assistant about. The path is the identical string in both cases; only the kind
+ * of site tells them apart, so that is what this keys on rather than pretending
+ * one blanket answer covers both.
+ */
+const PLATFORM_ONLY_RULES: Partial<Record<SiteType, RegExp[]>> = {
+  ecommerce: [new RegExp(`${SEGMENT}\\*?services${SEGMENT_END}`, 'i')],
+};
+
+/**
+ * Multi-market stores repeat every rule with a locale wildcard in front: the
+ * cart rule arrives as a wildcard segment followed by "/cart/", the collections
+ * rule as a wildcard followed by "/collections/", and so on. Strip that prefix
+ * before matching, or the localised copy of a housekeeping rule reads as a
+ * content block.
+ *
+ * Those examples are described rather than quoted on purpose — writing them
+ * literally puts an asterisk-slash inside this comment and closes it early. The
+ * previous version worked around that with zero-width spaces wedged between the
+ * two characters, which is invisible in every editor and breaks the moment
+ * anyone reformats or strips whitespace. It did break, exactly that way.
  */
 function stripLocalePrefix(rulePath: string): string {
   return rulePath.replace(/^[/*]+/, '/');
 }
 
-function isHousekeeping(rulePath: string): boolean {
+function isHousekeeping(rulePath: string, siteType: SiteType): boolean {
   const candidates = [rulePath, stripLocalePrefix(rulePath)];
-  return HOUSEKEEPING_RULES.some((pattern) => candidates.some((candidate) => pattern.test(candidate)));
+  const rules = [...HOUSEKEEPING_RULES, ...(PLATFORM_ONLY_RULES[siteType] ?? [])];
+  return rules.some((pattern) => candidates.some((candidate) => pattern.test(candidate)));
 }
 
 /**
@@ -272,7 +346,10 @@ function buildAccessRows(context: ScanContext): AgentAccessRow[] {
 
   return AI_BOTS.map(({ agent, label }) => {
     const probe = context.botProbes[agent];
-    const liveTested = Boolean(probe && !probe.failure) && serverWasAnswering;
+    // A rate-limited probe is not a live test. The server told us how fast we
+    // asked, not whether this crawler is welcome, so the row falls back to what
+    // robots.txt says rather than reporting a block we did not observe.
+    const liveTested = Boolean(probe && !probe.failure && !probe.rateLimited) && serverWasAnswering;
 
     if (liveTested && (probe.blocked || probe.status === 404)) {
       return {
@@ -324,8 +401,31 @@ export function checkBotAccess(context: ScanContext): CheckOutcome {
    */
   const refused = LIVE_PROBE_BOTS.filter(({ agent }) => {
     const probe = context.botProbes[agent];
-    return probe && (probe.blocked || probe.status === 404) && !probe.failure;
+    return probe && (probe.blocked || probe.status === 404) && !probe.failure && !probe.rateLimited;
   });
+
+  /**
+   * Crawlers the server asked us to slow down for, even after a retry.
+   *
+   * Reported, never scored. mrisoftware.com served Amazonbot a 200 and then
+   * rate-limited the next two requests; we called that a refusal and took the
+   * whole 25-point check to zero. The site was blocking nobody. Saying "we could
+   * not test this one" is the only claim the evidence supports.
+   */
+  const rateLimited = LIVE_PROBE_BOTS.filter(({ agent }) => context.botProbes[agent]?.rateLimited);
+
+  /**
+   * Said on every path that can reach it, not just the last one.
+   *
+   * This note first lived only in the final pass branch, so a site with no
+   * robots.txt — which exits early — silently dropped it. The whole point is to
+   * admit what we could not test; an admission that appears on some reports and
+   * not others is worse than none, because the reader cannot tell which they
+   * are holding.
+   */
+  const limitNote = rateLimited.length
+    ? ` ${rateLimited.map((bot) => bot.agent).join(', ')} could not be live-tested — the server rate-limited our requests, which says nothing about how it treats the real crawler.`
+    : '';
 
   // Only meaningful if the site served *us*. When it refuses everyone, that is
   // the crawlability check's finding, not a crawler-specific one.
@@ -398,7 +498,7 @@ export function checkBotAccess(context: ScanContext): CheckOutcome {
       status: 'pass',
       details: `Server refused our scanner (HTTP ${context.homepage.status ?? 'blocked'}) but served ${probedOk
         .map((bot) => bot.agent)
-        .join(', ')} normally.`,
+        .join(', ')} normally.${limitNote}`,
       humanExplanation:
         `Your server turns away visitors it does not recognise — including our scanner — but served your homepage normally when we asked as ${probedOk
           .map((bot) => bot.label)
@@ -440,9 +540,9 @@ export function checkBotAccess(context: ScanContext): CheckOutcome {
       ...base,
       status: 'pass',
       details:
-        robotsTxt.status === 404
+        (robotsTxt.status === 404
           ? 'No robots.txt (HTTP 404). Default behaviour is "everything allowed".'
-          : `robots.txt returned HTTP ${robotsTxt.status} with no usable rules.`,
+          : `robots.txt returned HTTP ${robotsTxt.status} with no usable rules.`) + limitNote,
       humanExplanation:
         `${reason}, and when there are no rules the default is "everyone is welcome" — so ChatGPT, Claude, Gemini and Perplexity can all read your site. ` +
         'Nothing to fix here. If you add a robots.txt later, make sure it does not block the AI crawlers by accident.',
@@ -462,7 +562,7 @@ export function checkBotAccess(context: ScanContext): CheckOutcome {
     const blockingRule =
       keyDecisions.find((decision) => !decision.allowed)?.rule || (rootDecision.allowed ? null : rootDecision.rule);
 
-    const otherBlocks = collectOtherBlocks(robots!, agent);
+    const otherBlocks = collectOtherBlocks(robots!, agent, context.siteType);
 
     return {
       agent,
@@ -513,7 +613,7 @@ export function checkBotAccess(context: ScanContext): CheckOutcome {
       status: 'warning',
       details: `AI crawlers can reach your ${context.profile.keyPageLabel}, but these paths are disallowed: ${sampleRules.join(', ')}${
         blockedPaths.length > sampleRules.length ? `, +${blockedPaths.length - sampleRules.length} more` : ''
-      }.`,
+      }.${limitNote}`,
       humanExplanation:
         `AI assistants can reach your ${context.profile.keyPageLabel}, which is the important part. But your robots.txt also blocks some other sections of the site ` +
         `(${sampleRules.slice(0, 3).join(', ')}${blockedPaths.length > 3 ? ', and others' : ''}). ` +
@@ -531,12 +631,13 @@ export function checkBotAccess(context: ScanContext): CheckOutcome {
     ? ` Live requests as ${probedOk.map((bot) => bot.agent).join(', ')} were served normally.`
     : '';
 
+
   const defects = describeDefects(robots);
 
   return {
     ...base,
     status: 'pass',
-    details: `All ${AI_BOTS.length} AI crawlers can reach the homepage and your ${context.profile.keyPageLabel}.${probeNote}${defects.detail}`,
+    details: `All ${AI_BOTS.length} AI crawlers can reach the homepage and your ${context.profile.keyPageLabel}.${probeNote}${limitNote}${defects.detail}`,
     humanExplanation:
       `Your robots.txt file lets every major AI assistant — ChatGPT, Claude, Gemini, Perplexity, Copilot and Amazon's — read your site, including your ${context.profile.keyPageLabel}. ` +
       (probedOk.length
@@ -585,7 +686,7 @@ function describeDefects(robots: ScanContext['robots']): { detail: string; expla
  * Disallow rules that apply to this bot and are neither key-page paths nor
  * routine housekeeping — the paths a site owner should actually look at.
  */
-function collectOtherBlocks(robots: NonNullable<ScanContext['robots']>, agent: string): RobotsRule[] {
+function collectOtherBlocks(robots: NonNullable<ScanContext['robots']>, agent: string, siteType: SiteType): RobotsRule[] {
   const group =
     robots.groups.find((candidate) => candidate.userAgents.includes(agent.toLowerCase())) ||
     robots.groups.find((candidate) => candidate.userAgents.includes('*'));
@@ -593,7 +694,7 @@ function collectOtherBlocks(robots: NonNullable<ScanContext['robots']>, agent: s
   if (!group) return [];
 
   return group.rules.filter(
-    (rule) => rule.type === 'disallow' && rule.path !== '' && !isHousekeeping(rule.path),
+    (rule) => rule.type === 'disallow' && rule.path !== '' && !isHousekeeping(rule.path, siteType),
   );
 }
 

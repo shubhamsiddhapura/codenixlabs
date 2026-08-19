@@ -31,6 +31,9 @@ import { LIVE_PROBE_BOTS } from './botAccess';
  */
 const MIN_TEXT_CHARS = 500;
 
+/** Mirrors MAX_BODY_BYTES in the fetcher; used only for wording the notice. */
+const MAX_READ_MB = 5;
+
 /** An inline JSON blob this big is the page's content, not a config object. */
 const MIN_STATE_BYTES = 3000;
 
@@ -178,7 +181,40 @@ export function checkCrawlability(context: ScanContext): CrawlabilityResult {
     };
   }
 
-  const brokenPages = pages.filter((page) => page !== homepage && (page.failure || !page.ok));
+  /**
+   * A page we never asked for is not a broken page.
+   *
+   * `deadline_exceeded` means our own scan budget ran out before the request
+   * finished — it is a fact about us, not about their server. inapp.com came
+   * back with "5 of 6 sampled pages did not return HTTP 200", listing five URLs
+   * that are perfectly fine, because the budget expired mid-crawl. The owner
+   * would have gone looking for five broken pages that do not exist.
+   *
+   * Third time this shape of mistake has turned up: a 429 read as a refusal, our
+   * timeout read as a dead site, and now our timeout read as their broken pages.
+   * The rule is the same every time — a limit we imposed is never evidence about
+   * them. The scan is already marked partial when this happens, which is the
+   * honest way to report it.
+   */
+  const brokenPages = pages.filter(
+    (page) => page !== homepage && page.failure !== 'deadline_exceeded' && (page.failure || !page.ok),
+  );
+
+  /**
+   * Pages so heavy we stopped reading, said out loud.
+   *
+   * Two reasons this belongs in the report rather than in a log. First, it is a
+   * limit on our own view, and everything else fixed today was about not letting
+   * our limits masquerade as facts about the site — a reader who is told we read
+   * the first 5MB can weigh the heading and link counts accordingly.
+   *
+   * Second, it is a genuine finding in its own right. Assistants fetch on a
+   * budget exactly as we do; a homepage this size is at real risk of being
+   * dropped mid-download by the very crawlers this tool is about. The site owner
+   * almost certainly does not know — it renders fine on their own machine.
+   */
+  const oversized = pages.filter((page) => page.truncated);
+  const weightNote = describeWeight(oversized);
 
   const healthy = pages.filter((page) => !page.failure && page.ok);
   const modes = healthy.map(renderModeOf);
@@ -274,7 +310,7 @@ export function checkCrawlability(context: ScanContext): CrawlabilityResult {
       status: 'pass',
       details: `All ${pages.length} sampled page(s) returned HTTP 200 with readable text content in the HTML. Homepage responded in ${
         context.homepage.durationMs
-      }ms — band ${responseBandOf(context.homepage.durationMs).grade}.`,
+      }ms — band ${responseBandOf(context.homepage.durationMs).grade}.${weightNote.detail}`,
       humanExplanation:
         'Every page we checked loaded cleanly and its content was readable straight from the server, without needing JavaScript to run first. ' +
         'That is exactly what an AI crawler needs, and a surprising number of modern sites fail it. ' +
@@ -283,7 +319,8 @@ export function checkCrawlability(context: ScanContext): CrawlabilityResult {
         // out of answers, and by then there is nothing in analytics to find.
         `Your homepage answered in ${(context.homepage.durationMs / 1000).toFixed(1)}s, which is ${
           responseBandOf(context.homepage.durationMs).note
-        } — worth watching, because assistants fetch competing sources in parallel and write the answer from whatever arrives first.`,
+        } — worth watching, because assistants fetch competing sources in parallel and write the answer from whatever arrives first.` +
+        weightNote.explanation,
     },
   };
 }
@@ -317,6 +354,27 @@ const RESPONSE_BANDS: { upTo: number; grade: string; note: string }[] = [
 
 /** Only this band and worse costs points. */
 const PENALISED_FROM_MS = 4000;
+
+/**
+ * Never changes the status. A heavy page is worth knowing about, but the check
+ * this sits in scores whether pages *load*, and these ones did.
+ */
+function describeWeight(oversized: { url: string }[]): { detail: string; explanation: string } {
+  if (!oversized.length) return { detail: '', explanation: '' };
+
+  const one = oversized.length === 1;
+  return {
+    detail: ` ${oversized.length} page(s) exceeded our ${MAX_READ_MB}MB read limit and were truncated: ${oversized
+      .slice(0, 3)
+      .map((page) => page.url)
+      .join(', ')}.`,
+    explanation:
+      ` One thing about how we read your site: ${one ? 'one of your pages was' : `${oversized.length} of your pages were`} larger than ${MAX_READ_MB}MB, ` +
+      `so we read the first ${MAX_READ_MB}MB and stopped. Everything we report about ${one ? 'it' : 'them'} is real, but there may be more further down that we did not see. ` +
+      'That is worth knowing for its own sake: AI assistants fetch pages on a time budget in the same way we do, and a page this heavy risks being abandoned part-read by the very crawlers this report is about. ' +
+      'It is usually images or stylesheets written directly into the page rather than linked as separate files — whoever maintains your site will know the phrase "inlined assets".',
+  };
+}
 
 export function responseBandOf(ms: number): { grade: string; note: string } {
   return RESPONSE_BANDS.find((band) => ms < band.upTo) ?? RESPONSE_BANDS[RESPONSE_BANDS.length - 1];

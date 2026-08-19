@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Search, Loader2 } from 'lucide-react';
 
 /**
- * The scan can take up to fifteen seconds, which is long enough that a static
+ * The scan can take up to twenty seconds, which is long enough that a static
  * spinner reads as a hang. The status line narrates what is genuinely
  * happening, in the order the engine does it, and the last step holds rather
  * than looping — so it never claims to be further along than it is.

@@ -25,7 +25,7 @@ export const TOTAL_POINTS = 100;
  * objective, but it makes them fixed, comparable over time, and visibly changed
  * when they change. A before/after score is only meaningful within one version.
  */
-export const SCORING_VERSION = '1.6.1';
+export const SCORING_VERSION = '1.7.0';
 
 /**
  * Checks whose failure is not a matter of opinion.
@@ -81,7 +81,57 @@ export interface Scored {
  * exceed 70 no matter how good it is, which would be reporting our own blind
  * spot as their failure.
  */
-export function totalScore(checks: CheckResult[]): Scored {
+/**
+ * The highest score a scan can award, and why it is not 100.
+ *
+ * A crawl can establish that an assistant is *able* to read you. It cannot
+ * establish that one actually names you — and that is the question a site owner
+ * really has. Five points are held back for what this method structurally
+ * cannot see:
+ *
+ *   - whether ChatGPT, Claude or Perplexity in fact cite you in an answer
+ *   - anything that only appears once JavaScript has run, which we do not render
+ *   - the rest of your site: we sample about five pages, not all of them
+ *   - the 19 further signals catalogued for later phases that Phase 1 does not run
+ *
+ * This is a statement about the method, not a penalty against the site, and it
+ * is published in the weights table with everything else. A tool that hands out
+ * flawless marks reads as a sales gimmick — but the fix for that is to be honest
+ * about the ceiling, never to shave a few points off in secret and hope nobody
+ * asks how the number was reached.
+ */
+export const SCAN_CEILING = 95;
+
+/**
+ * The best grade available when part of the assessment could not run.
+ *
+ * flipkart.com blocks our scanner, so the structured-data check — the heaviest
+ * one — could not be read. We do not score a skipped check as zero, because
+ * that would charge a site for our blind spot. But excluding it from the total
+ * meant the remaining checks averaged to a perfect result, and Flipkart came out
+ * A/100: a top grade off roughly seventy per cent of an examination.
+ *
+ * An A says "we looked at everything and it is excellent". When we did not look
+ * at everything, we may not say that.
+ */
+const GRADE_FLOOR: Record<Grade, number> = { A: 90, B: 75, C: 60, D: 40, F: 0 };
+
+/**
+ * How far the grade may reach, given how much of the assessment actually ran.
+ *
+ * One blind spot is not the same as six. flipkart.com blocks our scanner so
+ * thoroughly that only the bot-access check completes — capping that at B still
+ * presents a confident verdict drawn from one seventh of the examination. The
+ * ceiling drops as the blind spots multiply, so the letter degrades in step with
+ * how little we could see rather than falling off one cliff.
+ */
+function ceilingFor(unverified: number): Grade {
+  if (unverified === 0) return 'A';
+  if (unverified <= 2) return 'B';
+  return 'C';
+}
+
+export function totalScore(checks: CheckResult[], siteType: SiteType = 'general'): Scored {
   const possible = checks.reduce((sum, check) => sum + check.pointsPossible, 0);
   const awarded = checks.reduce((sum, check) => sum + check.pointsAwarded, 0);
 
@@ -89,8 +139,43 @@ export function totalScore(checks: CheckResult[]): Scored {
   // dividing by zero.
   if (possible === 0) return { score: 0, grade: 'F', normalised: true };
 
-  const score = Math.round((awarded / possible) * 100);
-  return { score, grade: toGrade(score), normalised: possible !== TOTAL_POINTS };
+  /**
+   * The grade comes from the percentage, the number from the ceiling.
+   *
+   * Deriving the letter from the already-scaled number would move every
+   * boundary down by five points at once — a site that earns 90% of what we
+   * measured would drop from A to B for no reason but a change in presentation.
+   * That is a silent recalibration of everyone's result, and the opposite of
+   * what this change is for. The rules for earning an A are exactly what they
+   * were; only the top of the printed scale has moved.
+   */
+  const percent = (awarded / possible) * 100;
+  const unverified = unverifiedCount(checks, siteType);
+
+  const measured = Math.round((percent / 100) * SCAN_CEILING);
+  const grade = toGrade(percent);
+
+  if (unverified === 0) return { score: measured, grade, normalised: possible !== TOTAL_POINTS };
+
+  // Cap the number alongside the letter. Leaving 95 on screen under a B would
+  // read as a bug in the report rather than a limit on what we examined.
+  const cappedGrade = capGrade(grade, ceilingFor(unverified));
+  // One point under the floor of the next grade up, scaled — so the number and
+  // the letter agree instead of the report appearing to contradict itself.
+  const nextGradeUp = GRADE_ORDER[GRADE_ORDER.indexOf(cappedGrade) + 1] ?? 'A';
+  const ceiling = Math.round(((GRADE_FLOOR[nextGradeUp] - 1) / 100) * SCAN_CEILING);
+
+  return {
+    score: cappedGrade === grade ? measured : Math.min(measured, ceiling),
+    grade: cappedGrade,
+    normalised: possible !== TOTAL_POINTS,
+  };
+}
+
+const GRADE_ORDER: Grade[] = ['F', 'D', 'C', 'B', 'A'];
+
+function capGrade(grade: Grade, ceiling: Grade): Grade {
+  return GRADE_ORDER.indexOf(grade) > GRADE_ORDER.indexOf(ceiling) ? ceiling : grade;
 }
 
 export function toGrade(score: number): Grade {

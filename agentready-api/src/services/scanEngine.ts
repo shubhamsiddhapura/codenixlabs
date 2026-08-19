@@ -1,6 +1,6 @@
 import { config } from '../config';
 import { CheckId, CheckOutcome, CheckResult, ScanResult, SiteType } from '../types';
-import { Deadline, FetchResult, fetchUrl, fetchWithHttpFallback } from './fetcher';
+import { Deadline, FetchResult, PROBE_BODY_BYTES, fetchUrl, fetchWithHttpFallback } from './fetcher';
 import { HtmlDocument, typesOf } from './htmlDocument';
 import { ScanContext } from './scanContext';
 import { collectSitemapUrls, isSampleablePage, selectKeyPages } from './discovery';
@@ -102,9 +102,7 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
     // Ask for the homepage again as each named AI crawler. This is what
     // separates "robots.txt allows GPTBot" from "the server actually serves
     // GPTBot" — a gap that costs sites their entire AI visibility silently.
-    Promise.all(
-      [...LIVE_PROBE_BOTS, CONTROL_BOT].map((bot) => fetchUrl(homepage.url, deadline, { userAgent: bot.userAgent })),
-    ),
+    probeAsCrawlers(homepage.url, deadline),
   ]);
 
   const botProbes: Record<string, FetchResult> = {};
@@ -176,7 +174,7 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
     return scoreCheck(outcome ?? unableToVerify(checkId, context.siteType), context.siteType);
   });
 
-  const { score, grade } = totalScore(checks);
+  const { score, grade } = totalScore(checks, verdict.siteType);
 
   return {
     domain,
@@ -194,10 +192,22 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
     renderMode: crawlability.renderMode,
     scanDurationMs: Date.now() - startedAt,
     jsRenderWarning: crawlability.jsRenderWarning,
-    // "Partial" means the deadline beat us, not that a check did not apply.
-    // A site with no discoverable subpages gets a complete, cacheable scan;
-    // only a timed-out one is worth re-running.
-    partial: structured.timedOut,
+    /**
+     * "Partial" means the deadline beat us, not that a check did not apply.
+     *
+     * The comment above said exactly that while the code said something much
+     * narrower: it was wired to `structured.timedOut`, so a scan was only ever
+     * declared partial when one specific check ran out of time. Seven scans in
+     * the database overran the fifteen-second ceiling — one took 25 seconds —
+     * and every single one of them recorded `partial: false`. Those reports were
+     * built from half-finished crawls and presented as final, which is the worst
+     * shape of error we can make: not wrong, but quietly wrong.
+     *
+     * Asked here, at the end, rather than at the midpoint where `ranOutOfTime`
+     * is captured — the trust-signals check still makes requests after that
+     * point, so a scan can exhaust its budget between the two.
+     */
+    partial: deadline.expired() || structured.timedOut,
     noWebsite: false,
     scoringVersion: SCORING_VERSION,
   };
@@ -261,6 +271,77 @@ function resolveStructuredData(
   };
 }
 
+/**
+ * How many crawler probes go out at once, and how long we pause between waves.
+ *
+ * All eleven used to leave together. That is a burst no ordinary visitor
+ * produces, and a fair number of servers answer the first few and then start
+ * returning 429 — which we read back as "this site blocks AI crawlers". We were
+ * measuring our own impatience and billing the site owner for it.
+ *
+ * Four at a time with a short pause is still far quicker than a real crawler
+ * would ever be, and it costs about half a second of a fifteen-second budget.
+ */
+const PROBE_WAVE_SIZE = 4;
+const PROBE_WAVE_GAP_MS = 250;
+const RATE_LIMIT_BACKOFF_MS = 800;
+
+const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Ask for one page as every named crawler, without hammering the server.
+ *
+ * A probe that comes back rate-limited is retried once after a longer pause,
+ * because the first answer told us about our own request rate and nothing about
+ * the crawler. If the retry is rate-limited too, the result carries that fact
+ * through to the check, which reports "could not test" rather than "blocked".
+ */
+async function probeAsCrawlers(url: string, deadline: Deadline): Promise<FetchResult[]> {
+  const bots = [...LIVE_PROBE_BOTS, CONTROL_BOT];
+  const results: FetchResult[] = [];
+
+  for (let start = 0; start < bots.length; start += PROBE_WAVE_SIZE) {
+    if (deadline.expired()) {
+      // Out of time. Record the untested ones as such rather than leaving holes
+      // the check would have to guess about.
+      for (let i = results.length; i < bots.length; i += 1) {
+        results.push({ ...EMPTY_PROBE, requestedUrl: url, finalUrl: url, failure: 'deadline_exceeded' });
+      }
+      break;
+    }
+
+    if (start > 0) await pause(PROBE_WAVE_GAP_MS);
+    const wave = bots.slice(start, start + PROBE_WAVE_SIZE);
+    results.push(...(await Promise.all(wave.map((bot) => fetchUrl(url, deadline, { userAgent: bot.userAgent, maxBytes: PROBE_BODY_BYTES })))));
+  }
+
+  const limited = results.map((result, index) => ({ result, index })).filter(({ result }) => result.rateLimited);
+  if (limited.length && !deadline.expired()) {
+    await pause(RATE_LIMIT_BACKOFF_MS);
+    for (const { index } of limited) {
+      if (deadline.expired()) break;
+      results[index] = await fetchUrl(url, deadline, { userAgent: bots[index].userAgent });
+    }
+  }
+
+  return results;
+}
+
+const EMPTY_PROBE: FetchResult = {
+  requestedUrl: '',
+  finalUrl: '',
+  status: null,
+  ok: false,
+  headers: {},
+  body: null,
+  contentType: null,
+  failure: null,
+  blocked: false,
+  rateLimited: false,
+  truncated: false,
+  durationMs: 0,
+};
+
 function titleFor(checkId: CheckId, siteType: SiteType): string {
   if (checkId === 'structured_data') return `Structured data (${SCHEMA_PROFILES[siteType].label})`;
   if (checkId === 'content_structure') return CONTENT_STRUCTURE_TITLE;
@@ -294,11 +375,27 @@ export function whyNoWebsite(homepage: HtmlDocument): NoWebsiteReason | null {
     case 'dns':
       return 'dns';
     case 'connection_refused':
-    case 'network':
       return 'unreachable';
+    /**
+     * `network` is deliberately absent, and so is `too_large`.
+     *
+     * `network` is the catch-all for everything we could not classify, so
+     * routing it here meant any unrecognised transport hiccup declared a domain
+     * nonexistent. That is how mastersunion.org — a live business school serving
+     * a 4MB homepage over HTTP 200 — was told "nothing answered at this address".
+     * Saying a website does not exist is the strongest claim this tool makes and
+     * it should rest on evidence, not on the bucket labelled "something else".
+     */
     case 'timeout':
-    case 'deadline_exceeded':
       return 'timeout';
+    /**
+     * `deadline_exceeded` is deliberately absent.
+     *
+     * It means our own scan budget ran out, not that the site failed to answer.
+     * Routing it here told healthy sites they did not exist — the honest result
+     * is an ordinary scan that comes back marked partial, saying we ran out of
+     * time, which is what actually happened.
+     */
     case 'ssl':
       return 'ssl';
     case 'redirect_loop':

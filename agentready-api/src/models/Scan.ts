@@ -36,7 +36,7 @@ export interface ScanDoc extends Document {
   renderMode: RenderMode;
   scanDurationMs: number;
   jsRenderWarning: boolean;
-  /** True when the 15s deadline cut the scan short and some checks are unverified. */
+  /** True when the scan deadline cut it short and some checks are unverified. */
   partial: boolean;
   /** No website could be read at this address — see whyNoWebsite in scanEngine. */
   noWebsite: boolean;
