@@ -90,7 +90,7 @@ export const LeadGate: React.FC<{
 
             <Field
               id="lead-whatsapp"
-              label="WhatsApp (optional — only if you want us to call)"
+              label="Phone Number (optional)"
               error={touched ? problems.whatsapp : undefined}
             >
               <input

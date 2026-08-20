@@ -103,7 +103,24 @@ function normaliseTeaser(data: TeaserScan): TeaserScan {
   const legacy = data as TeaserScan & { teaserChecks?: TeaserScan['checks'] };
   return {
     ...data,
-    checks: legacy.checks ?? legacy.teaserChecks ?? [],
+    /**
+     * An older API sends two summary rows under the old name, carrying no
+     * points, no explanation and no fix. Filling the gaps here keeps every
+     * component downstream working on one shape instead of each guarding
+     * separately — and stops a missing number reaching the screen as the word
+     * "undefined".
+     */
+    checks: (legacy.checks ?? legacy.teaserChecks ?? []).map((check) => ({
+      ...check,
+      // Spread first, then fill the holes — the other way round and the spread
+      // puts the missing keys straight back as undefined.
+      pointsAwarded: check.pointsAwarded ?? 0,
+      pointsPossible: check.pointsPossible ?? 0,
+      humanExplanation: check.humanExplanation ?? null,
+      generatedFix: check.generatedFix ?? null,
+      generatedFixLanguage: check.generatedFixLanguage ?? null,
+      generatedFixTarget: check.generatedFixTarget ?? null,
+    })),
     lockedChecks: data.lockedChecks ?? 0,
     fixesAvailable: data.fixesAvailable ?? 0,
     // Older APIs predate these entirely; absent means "not one of those cases".

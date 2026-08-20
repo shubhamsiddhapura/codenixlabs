@@ -61,7 +61,9 @@ export const CheckCard: React.FC<{
           >
             {style.label}
           </span>
-          <span className="hidden text-xs sm:inline text-neutral-500 whitespace-nowrap">{formatPoints(check)}</span>
+          {formatPoints(check) ? (
+            <span className="hidden text-xs sm:inline text-neutral-500 whitespace-nowrap">{formatPoints(check)}</span>
+          ) : null}
         </div>
       </header>
 
@@ -156,8 +158,18 @@ export const CheckCard: React.FC<{
  * happened instead — those are normalised out of the score rather than counted
  * against the site, and the card should not imply otherwise.
  */
-function formatPoints(check: ScanCheck): string {
+/**
+ * Returns null when there is nothing meaningful to print.
+ *
+ * This used to be rendered only in the unlocked view, where the points were
+ * always present. It now renders on every card — and an older API that omits
+ * them put the literal string "undefined/undefined pts" on screen next to every
+ * finding. A number we do not have is not a number worth inventing a slot for,
+ * so the label simply does not appear.
+ */
+function formatPoints(check: ScanCheck): string | null {
   if (check.status === 'skipped') return 'not scored';
+  if (typeof check.pointsAwarded !== 'number' || typeof check.pointsPossible !== 'number') return null;
   return `${check.pointsAwarded}/${check.pointsPossible} pts`;
 }
 
