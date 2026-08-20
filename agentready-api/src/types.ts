@@ -173,6 +173,25 @@ export interface ScanResult {
    */
   noWebsite: boolean;
   /**
+   * The site exists and answered, but refused us everything we asked for, so no
+   * check could actually run.
+   *
+   * Distinct from `noWebsite`, which means there is nothing there at all. Here
+   * there is plainly a website — croma.com serves its customers perfectly — and
+   * we simply were not allowed to look at it. Without this the score fell
+   * through to F, 0 out of 100, because zero points were in play; an F is a
+   * claim about a website, and we never saw one.
+   *
+   * Worth knowing what the alternative looks like: a competitor scanner gave
+   * croma.com 71/100 while its own screenshot showed an "Access Denied" page,
+   * and gave healthkart.com 58/100 over a "Performing security verification"
+   * screen. A 403 page has a title and its robots.txt reads fine, so a scanner
+   * that never asks "did I get the real page?" produces a plausible number for
+   * a page that is not the site. Refusing to score is the right call — printing
+   * F/0 while doing so was not.
+   */
+  unreadable: boolean;
+  /**
    * Which scoring rules produced this number. Stamped on every scan so two
    * scores are only ever compared when they were produced the same way, and so
    * a change to the weights is visible rather than silent.

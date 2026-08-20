@@ -1,5 +1,6 @@
 import { CheckOutcome } from '../../types';
 import { ScanContext, allPages } from '../scanContext';
+import { looksLikeKeyUrl } from '../discovery';
 import { HtmlDocument } from '../htmlDocument';
 
 /**
@@ -54,6 +55,65 @@ export function checkMetaRobots(context: ScanContext): CheckOutcome {
   const verdicts = pages.map(inspectPage);
   const blocked = verdicts.filter((verdict) => verdict.noindex);
   const nofollowOnly = verdicts.filter((verdict) => !verdict.noindex && verdict.nofollow);
+
+  /**
+   * One deliberately hidden page is not a site that has hidden itself.
+   *
+   * apollo247.com noindexes a single credit-card campaign landing page —
+   * `/apollo-sbi-credit-card?utm_source=mweb…` — and we failed its entire
+   * indexability check, dropping the site from C to D. Noindexing marketing
+   * landing pages, thank-you pages and campaign URLs is standard, correct
+   * practice; those pages exist to receive ad traffic, not to be found in
+   * search, and duplicating them into an index is what a good SEO would
+   * actively prevent.
+   *
+   * A failure here should mean "your site is telling search engines and
+   * assistants to ignore it". That is true when the homepage carries the
+   * directive, or when it is on most of what we sampled — not when it is on one
+   * page out of six that was never meant to be found.
+   */
+  const homepageBlocked = verdicts[0]?.noindex === true;
+  const mostPagesBlocked = blocked.length > pages.length / 2;
+
+  /**
+   * Which noindexed pages are excusable, and which are the finding.
+   *
+   * A noindexed product page is serious: the product cannot be recommended by
+   * anything, and that is the whole subject of this report. A noindexed campaign
+   * landing page is the opposite — it exists to receive ad clicks, and keeping it
+   * out of the index is what a competent SEO would insist on.
+   *
+   * Campaign parameters in the URL are the clean signal. Nothing arrives at
+   * `?utm_source=mweb&utm_medium=homepage` expecting to be found in search.
+   */
+  const excusable = (verdict: { url: string }): boolean => {
+    const hasCampaignParams = /[?&](utm_|gclid|fbclid|mc_cid|campaign)/i.test(verdict.url);
+    return hasCampaignParams || !looksLikeKeyUrl(verdict.url, context.siteType);
+  };
+
+  const seriousBlocks = blocked.filter((verdict) => !excusable(verdict));
+
+  if (blocked.length && !seriousBlocks.length && !homepageBlocked && !mostPagesBlocked) {
+    return {
+      ...base,
+      status: 'warning',
+      details: `noindex on ${blocked.length}/${pages.length} sampled page(s), not including the homepage: ${blocked
+        .map((verdict) => verdict.url)
+        .slice(0, 3)
+        .join(', ')}.`,
+      humanExplanation:
+        `${blocked.length} of the ${pages.length} pages we sampled asks search engines and AI assistants not to index it, but your homepage does not, and most of your site does not. ` +
+        'That is usually deliberate and correct — campaign landing pages, thank-you pages and printer-friendly duplicates are routinely hidden on purpose, and hiding them is better practice than leaving them to compete with your real pages. ' +
+        `We are pointing it out rather than marking you down, because only you know whether ${blocked.length === 1 ? 'that page was' : 'those pages were'} meant to be found: ${blocked
+          .map((verdict) => verdict.url)
+          .slice(0, 3)
+          .join(', ')}. ` +
+        'If any of them is a page you would want an assistant to recommend, remove its noindex directive.',
+      generatedFix: null,
+      generatedFixLanguage: null,
+      generatedFixTarget: null,
+    };
+  }
 
   if (blocked.length) {
     return {

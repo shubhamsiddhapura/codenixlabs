@@ -236,19 +236,29 @@ function validateLeadInput(body: unknown): LeadInput {
   const email = String(source.email ?? '').trim().toLowerCase();
   const whatsappRaw = String(source.whatsapp ?? '').trim();
 
-  if (name.length < 2 || name.length > 100) {
-    throw new HttpError(400, 'Please enter your name.');
+  if (name.length > 100) {
+    throw new HttpError(400, 'That name is too long.');
   }
   if (!EMAIL_PATTERN.test(email) || email.length > 200) {
     throw new HttpError(400, 'Please enter a valid email address — that is where your report goes.');
   }
 
-  // Keep +, drop spaces, dashes and brackets. Indian mobiles are 10 digits;
-  // with a country code the range below covers the rest of the world too.
+  /**
+   * The phone number is optional, and that is a deliberate trade.
+   *
+   * Demanding it was costing us almost every lead: roughly five people in eighty
+   * gave their details, and a phone number is the field most people stop at. An
+   * email address we can actually reach is worth more than a phone number we
+   * never receive, and someone who wants a call will give a number without being
+   * forced to.
+   *
+   * It is still validated when supplied — a malformed number in the database is
+   * worse than an empty one, because it looks like a way to reach someone.
+   */
   const whatsapp = whatsappRaw.replace(/[^\d+]/g, '');
   const digits = whatsapp.replace(/\D/g, '');
-  if (digits.length < 8 || digits.length > 15) {
-    throw new HttpError(400, 'Please enter a valid WhatsApp number, including your country code.');
+  if (whatsapp && (digits.length < 8 || digits.length > 15)) {
+    throw new HttpError(400, 'That phone number does not look right. Leave it blank if you would rather not share it.');
   }
 
   /**
@@ -267,6 +277,8 @@ function validateLeadInput(body: unknown): LeadInput {
   const consentText = String(source.consentText ?? '').trim().slice(0, 1000) || DEFAULT_CONSENT_TEXT;
   const consentSource = String(source.consentSource ?? '').trim().slice(0, 120) || 'ai-readiness-gate';
 
-  return { name, email, whatsapp, consent: true, consentText, consentSource };
+  // An empty name is recorded as such rather than refused. The email is the
+  // part we need; everything else is a courtesy the visitor may decline.
+  return { name: name || 'Not given', email, whatsapp, consent: true, consentText, consentSource };
 }
 

@@ -175,6 +175,28 @@ export function checkAgentInterface(context: ScanContext): CheckOutcome {
     };
   }
 
+  /**
+   * We never got an answer about any of them, so we cannot say they are absent.
+   *
+   * "No agent interface found" is a claim that the file is not there. When every
+   * request timed out, the only thing we established is that the site was slow
+   * while we were asking. mcaffeine.com flipped from pass to fail between two
+   * runs on exactly this, with nothing about the site having changed.
+   */
+  if (primary.state === 'unknown' && (!fallback || fallback.state === 'unknown')) {
+    return {
+      ...base,
+      status: 'skipped',
+      details: `Could not reach ${(AGENT_ARTIFACT_PATHS[context.siteType] || []).map((entry) => entry.path).join(', ')} — ${primary.detail} Not scored.`,
+      humanExplanation:
+        'We could not finish checking whether your site publishes a machine-readable interface for AI agents — the requests did not come back in time, which usually means the site was busy rather than that anything is wrong. ' +
+        'This has been left out of your score rather than counted against you, because we did not establish that anything is missing. Re-run the scan and it will normally complete.',
+      generatedFix: null,
+      generatedFixLanguage: null,
+      generatedFixTarget: null,
+    };
+  }
+
   return {
     ...base,
     status: 'fail',
@@ -188,7 +210,21 @@ export function checkAgentInterface(context: ScanContext): CheckOutcome {
 
 // --- Artefact evaluation --------------------------------------------------
 
-type ArtifactState = 'valid' | 'malformed' | 'missing';
+type ArtifactState = 'valid' | 'malformed' | 'missing' |
+  /**
+   * We never got an answer, so we do not know whether it is there.
+   *
+   * Distinct from `missing`, which used to swallow it. A request that timed out
+   * or ran past the scan budget is a fact about us; reporting it as "no agent
+   * interface found" tells the owner a file is absent when we simply never
+   * managed to ask. On a slow site this turned a passing check into a failure —
+   * mcaffeine.com went pass to fail on a run where the only thing that changed
+   * was how busy the network was.
+   */
+  'unknown';
+
+/** Transport failures, as opposed to a server that answered "not here". */
+const NEVER_ANSWERED = new Set(['timeout', 'deadline_exceeded', 'network', 'connection_refused', 'dns', 'ssl']);
 
 interface ArtifactVerdict {
   state: ArtifactState;
@@ -196,8 +232,17 @@ interface ArtifactVerdict {
 }
 
 function evaluate(key: string, response: FetchResult | undefined): ArtifactVerdict {
-  if (!response || response.failure || !response.ok) {
-    return { state: 'missing', detail: response ? `HTTP ${response.status ?? response.failure}.` : 'Not checked.' };
+  if (!response) return { state: 'unknown', detail: 'Not checked.' };
+
+  if (response.failure) {
+    // A 404 is an answer: the file is not there. A timeout is not an answer.
+    return NEVER_ANSWERED.has(response.failure)
+      ? { state: 'unknown', detail: `No response (${response.failure}).` }
+      : { state: 'missing', detail: `${response.failure}.` };
+  }
+
+  if (!response.ok) {
+    return { state: 'missing', detail: `HTTP ${response.status}.` };
   }
 
   // A 200 that returns the site's own HTML is a soft 404 — very common on SPA

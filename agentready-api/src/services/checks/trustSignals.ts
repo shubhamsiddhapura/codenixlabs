@@ -135,6 +135,12 @@ const REQUIRED_PAGES: Record<SiteType, PolicySpec[]> = {
 };
 
 /** Exposed so the fixtures can pin the pattern that silently broke once. */
+/** Transport failures, as opposed to a server that answered "not here". */
+/** Enough visible text that a missing footer link means something. */
+const MIN_READABLE_CHARS = 500;
+
+const NEVER_ANSWERED = new Set(['timeout', 'deadline_exceeded', 'network', 'connection_refused', 'dns', 'ssl']);
+
 export const SHIPPING_TOPIC = new RegExp(SHIPPING.topicSource, 'i');
 
 /** Paths that mention a policy word but are not the policy page. */
@@ -199,12 +205,36 @@ export async function checkTrustSignals(context: ScanContext): Promise<CheckOutc
 
   // Only spend HTTP requests on the ones we could not find by reading. A site
   // with a working footer costs us zero extra fetches here.
+  /**
+   * Track whether we ever actually got to look.
+   *
+   * A page we could not fetch is not a page that does not exist, and this loop
+   * was quietly collapsing the two: when the budget ran out mid-probe, every
+   * unfound page was reported as "no dedicated page for returns, shipping,
+   * privacy" — a definite statement about a site we had stopped looking at.
+   * mcaffeine.com went from warning to fail on exactly this, with nothing about
+   * the site having changed but how busy the network was.
+   */
+  let probesCutShort = false;
+
   for (const finding of findings) {
-    if (finding.url || context.deadline.expired()) continue;
+    if (finding.url) continue;
+    if (context.deadline.expired()) {
+      probesCutShort = true;
+      continue;
+    }
 
     for (const path of finding.spec.probePaths.slice(0, 3)) {
-      if (context.deadline.expired()) break;
+      if (context.deadline.expired()) {
+        probesCutShort = true;
+        break;
+      }
       const response = await fetchUrl(`${context.origin}${path}`, context.deadline);
+      // A transport failure tells us nothing about whether the page is there.
+      if (response.failure && NEVER_ANSWERED.has(response.failure)) {
+        probesCutShort = true;
+        continue;
+      }
       // A soft 404 that returns 200 with a near-empty body is common; require
       // some actual content before calling the page real.
       if (response.ok && (response.body || '').length > 500) {
@@ -305,6 +335,40 @@ export async function checkTrustSignals(context: ScanContext): Promise<CheckOutc
         `Publish ${missing.length === 1 ? 'the missing page' : 'the missing pages'} and — this is the part sites forget — link ${missing.length === 1 ? 'it' : 'them'} from your footer so every page points to ${missing.length === 1 ? 'it' : 'them'}. ` +
         buriedNote +
         'A page that exists but is not linked anywhere is a page crawlers never find.',
+      generatedFix: null,
+    };
+  }
+
+  /**
+   * We stopped looking before we finished, so we cannot say they are absent.
+   *
+   * "We could not find your returns or privacy pages anywhere on your site" is a
+   * strong claim, and it needs us to have actually searched. When the budget ran
+   * out mid-probe we made it anyway.
+   */
+  /**
+   * Only when we could not read the homepage either.
+   *
+   * A readable homepage whose footer links no privacy page is genuine evidence:
+   * the probes are a second chance for pages that exist but are unlinked, not
+   * the primary method. Downgrading every cut-short scan would hide a real and
+   * common finding behind a caveat.
+   *
+   * It is the combination that is worthless — no readable homepage *and* no
+   * completed probes means we never looked anywhere, which is what happened on
+   * mcaffeine.com when it flipped from warning to fail.
+   */
+  const readHomepage = context.homepage.ok && context.homepage.text().length > MIN_READABLE_CHARS;
+
+  if (probesCutShort && !readHomepage) {
+    return {
+      ...base,
+      status: 'skipped',
+      details: `${details} Some pages could not be checked before the scan hit its time limit — not scored.`,
+      humanExplanation:
+        `We ran out of time before we could finish looking for ${joinWords(missingLabels, 'and')}, so we have left this out of your score rather than reporting pages as missing when we simply stopped searching. ` +
+        'That usually means the site was busy rather than that anything is wrong — re-run the scan and it will normally complete. ' +
+        'It is still worth checking yourself that those pages exist and are linked from your footer: assistants treat "cannot find it" the same as "does not have one".',
       generatedFix: null,
     };
   }

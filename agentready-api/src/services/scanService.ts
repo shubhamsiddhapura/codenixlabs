@@ -72,6 +72,7 @@ export async function scanUrl(submittedUrl: string, options: ScanRequestOptions 
     jsRenderWarning: result.jsRenderWarning,
     partial: result.partial,
     noWebsite: result.noWebsite,
+    unreadable: result.unreadable,
     scoringVersion: result.scoringVersion,
     comparisonScanId: null,
     unlocked: false,
@@ -319,11 +320,15 @@ export async function compareRuns(beforeId: string, afterId: string): Promise<Ru
 
 // --- Response shaping -----------------------------------------------------
 //
-// Three views of the same scan. The gate in spec section 2 is only real if the
-// locked fields never leave the server, so the stripping happens here rather
-// than in the client.
-
-const TEASER_CHECK_COUNT = 2;
+// Three views of the same scan. The gate is only real if the locked fields never
+// leave the server, so the stripping happens here rather than in the client —
+// a field the browser is told to hide is not hidden.
+//
+// What is behind the gate changed: it used to be five of seven checks and every
+// explanation, and about five visitors in eighty were willing to pay for that.
+// Now it is the generated fix code and nothing else. The verdict and the
+// reasoning are free, because a report that says "something is wrong" without
+// saying what is not worth an email address — and the code to fix it is.
 
 /**
  * The facts a reader needs to judge whether to believe the number: which rules
@@ -385,6 +390,7 @@ export function toFullScan(scan: ScanDoc): Record<string, unknown> {
     jsRenderWarning: scan.jsRenderWarning,
     partial: scan.partial,
     noWebsite: scan.noWebsite,
+    unreadable: scan.unreadable,
     audit: auditTrail(scan),
     comparisonScanId: scan.comparisonScanId ? String(scan.comparisonScanId) : null,
     unlocked: true,
@@ -426,6 +432,7 @@ export function toGatedScan(scan: ScanDoc): Record<string, unknown> {
     jsRenderWarning: scan.jsRenderWarning,
     partial: scan.partial,
     noWebsite: scan.noWebsite,
+    unreadable: scan.unreadable,
     audit: auditTrail(scan),
     comparisonScanId: scan.comparisonScanId ? String(scan.comparisonScanId) : null,
     unlocked: false,
@@ -448,21 +455,65 @@ export function toTeaser(scan: ScanDoc, cached: boolean): Record<string, unknown
     overallGrade: scan.overallGrade,
     overallScore: scan.overallScore,
     summary: scan.summary,
-    teaserChecks: scan.checks.slice(0, TEASER_CHECK_COUNT).map((check) => ({
+    /**
+     * Every check, every explanation. Only the code is held back.
+     *
+     * The gate used to sit in front of the whole report — two checks visible,
+     * five hidden, no explanations — and roughly five visitors in eighty went
+     * through it. That is not a conversion problem so much as a bad offer: we
+     * were asking for contact details in exchange for reading the rest of a
+     * verdict we had already started telling them.
+     *
+     * The trade now matches what people actually want. Findings and reasoning
+     * are free, because knowing your site is broken is worthless if you cannot
+     * see what is broken. The ready-to-paste fix is what someone will give an
+     * email address for, so that is the only thing behind the form.
+     */
+    checks: scan.checks.map((check) => ({
+      checkId: check.checkId,
+      title: check.title,
+      status: check.status,
+      pointsAwarded: check.pointsAwarded,
+      pointsPossible: check.pointsPossible,
+      details: check.details,
+      humanExplanation: check.humanExplanation,
+      generatedFix: null,
+      generatedFixLanguage: check.generatedFixLanguage,
+      // Named even while withheld: "the fix goes in your robots.txt" tells
+      // someone what they are being offered, which is the whole point of
+      // showing a locked block rather than hiding that one exists.
+      generatedFixTarget: check.generatedFixTarget,
+      agentAccess: check.agentAccess,
+      locked: Boolean(check.generatedFix),
+    })),
+    /**
+     * The old name, kept deliberately for one release.
+     *
+     * Renaming `teaserChecks` to `checks` broke every browser that had already
+     * loaded the previous bundle: it read `teaser.checks`, got undefined, and
+     * white-screened on `.map`. The same is true in reverse for anyone holding
+     * a cached copy of the old frontend right now.
+     *
+     * Two views of the same array, so neither side can be caught out. Delete it
+     * once the deployed frontend has been on `checks` long enough that no cached
+     * bundle is still asking — there is no rush, it costs one key.
+     */
+    teaserChecks: scan.checks.map((check) => ({
       checkId: check.checkId,
       title: check.title,
       status: check.status,
       details: check.details,
       agentAccess: check.agentAccess,
-      locked: false,
+      locked: Boolean(check.generatedFix),
     })),
-    lockedChecks: Math.max(0, scan.checks.length - TEASER_CHECK_COUNT),
+    lockedChecks: countFixes(scan),
     // Named in the teaser on purpose: "we generated the code to fix this" is
     // the strongest reason a visitor has to hand over an email (spec 3a).
     fixesAvailable: countFixes(scan),
     jsRenderWarning: scan.jsRenderWarning,
     partial: scan.partial,
     noWebsite: scan.noWebsite,
+    unreadable: scan.unreadable,
     scanDurationMs: scan.scanDurationMs,
     cached,
   };

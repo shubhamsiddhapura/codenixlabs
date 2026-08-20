@@ -83,7 +83,50 @@ export async function startScan(url: string, siteType?: SiteType, refresh = fals
     // only around the cache, for the person who just fixed something.
     body: JSON.stringify({ url, ...(siteType ? { siteType } : {}), ...(refresh ? { refresh: true } : {}) }),
   });
-  return data;
+  return normaliseTeaser(data);
+}
+
+/**
+ * Survive a browser and an API that disagree about the shape of a response.
+ *
+ * These deploy separately, so there is always a window where one is new and the
+ * other is not — and a field rename across that boundary is a white screen for
+ * everyone caught in it. This happened: `teaserChecks` became `checks`, the
+ * frontend shipped first, and `teaser.checks.map` threw
+ * "Cannot read properties of undefined" on the live preview the moment anyone
+ * ran a scan.
+ *
+ * The rule this encodes is that a missing field degrades the page, never breaks
+ * it. Reading both names costs one line; a crash costs the whole report.
+ */
+function normaliseTeaser(data: TeaserScan): TeaserScan {
+  const legacy = data as TeaserScan & { teaserChecks?: TeaserScan['checks'] };
+  return {
+    ...data,
+    /**
+     * An older API sends two summary rows under the old name, carrying no
+     * points, no explanation and no fix. Filling the gaps here keeps every
+     * component downstream working on one shape instead of each guarding
+     * separately — and stops a missing number reaching the screen as the word
+     * "undefined".
+     */
+    checks: (legacy.checks ?? legacy.teaserChecks ?? []).map((check) => ({
+      ...check,
+      // Spread first, then fill the holes — the other way round and the spread
+      // puts the missing keys straight back as undefined.
+      pointsAwarded: check.pointsAwarded ?? 0,
+      pointsPossible: check.pointsPossible ?? 0,
+      humanExplanation: check.humanExplanation ?? null,
+      generatedFix: check.generatedFix ?? null,
+      generatedFixLanguage: check.generatedFixLanguage ?? null,
+      generatedFixTarget: check.generatedFixTarget ?? null,
+    })),
+    lockedChecks: data.lockedChecks ?? 0,
+    fixesAvailable: data.fixesAvailable ?? 0,
+    // Older APIs predate these entirely; absent means "not one of those cases".
+    noWebsite: data.noWebsite ?? false,
+    unreadable: data.unreadable ?? false,
+  };
 }
 
 /** Exchanges contact details for the full report. */

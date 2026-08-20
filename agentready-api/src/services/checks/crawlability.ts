@@ -137,13 +137,45 @@ export function checkCrawlability(context: ScanContext): CrawlabilityResult {
       };
     }
 
+    /**
+     * Refused us, refused the AI crawlers — and refused a plain browser too.
+     *
+     * That last part changes the verdict entirely. croma.com, pepperfry.com and
+     * wakefit.co return 403 to an ordinary Chrome user-agent from this network
+     * exactly as they do to us, which means we are being filtered by where the
+     * request comes from, not by what it says it is. Their sites work perfectly
+     * for their actual customers.
+     *
+     * We scored all three F, 0 out of 100. An F is a claim about a website; we
+     * never saw one. The honest status is the one used everywhere else we could
+     * not look — not scored — and the grade cap then reflects how little of the
+     * assessment ran.
+     */
+    if (!context.browserReachable) {
+      return {
+        jsRenderWarning: false,
+        renderMode: 'server_rendered',
+        outcome: {
+          ...base,
+          status: 'skipped',
+          details: `Homepage returned HTTP ${homepage.status} to our scanner, to the AI crawler probes, and to a plain browser request — filtered by network address, not by user-agent. Not scored.`,
+          humanExplanation:
+            `Your server returned an error to every request we made — including one shaped exactly like an ordinary web browser. ` +
+            'That means the filtering is based on where the request came from rather than what it claimed to be, so it tells us nothing about how you treat ChatGPT or Claude specifically, and we have not guessed. ' +
+            'This check has been left out of your score rather than counted against you. ' +
+            'It is worth one manual look, because the same protection can catch AI crawlers arriving from cloud networks: ask whoever manages your hosting to search your server logs for GPTBot, ClaudeBot and PerplexityBot over the last month. ' +
+            'If you see them fetching pages normally, nothing here needs changing.',
+        },
+      };
+    }
+
     return {
       jsRenderWarning: false,
       renderMode: 'server_rendered',
       outcome: {
         ...base,
         status: 'fail',
-        details: `Homepage returned HTTP ${homepage.status} to our scanner (bot challenge or block).`,
+        details: `Homepage returned HTTP ${homepage.status} to our scanner (bot challenge or block), while a plain browser request was served normally.`,
         humanExplanation:
           "We couldn't access your site directly — your server turned our scanner away, and it turned away the AI crawlers too. " +
           'That is usually a bot-protection setting (Cloudflare, a firewall rule, or a security plugin) doing its job a little too broadly. ' +
@@ -154,6 +186,35 @@ export function checkCrawlability(context: ScanContext): CrawlabilityResult {
   }
 
   if (homepage.failure) {
+    /**
+     * Nothing came back to us — but a browser was served the page fine.
+     *
+     * This is the most valuable single finding the tool produces, and it used to
+     * be reported as "your website does not exist". myntra.com answers a browser
+     * in one second with 448KB and simply never replies to us: not a refusal,
+     * not an error page, silence. That is a WAF stalling an unrecognised bot,
+     * and every AI crawler gets the same treatment — silently, with no error in
+     * anyone's logs and nothing in analytics to notice.
+     */
+    if (context.browserReachable) {
+      return {
+        jsRenderWarning: false,
+        renderMode: 'server_rendered',
+        outcome: {
+          ...base,
+          status: 'fail',
+          details: `Homepage never answered our scanner (${homepage.failure}), but the same URL served a normal browser request.`,
+          humanExplanation:
+            'Your site is online and loads perfectly in a browser — but when a visitor arrives that is not a browser, your server does not answer at all. ' +
+            'It does not refuse the request or return an error; it simply holds the connection and stays silent until the visitor gives up. ' +
+            'We waited and got nothing, and that is exactly what ChatGPT, Claude and Perplexity get. They will not report it or retry — they just stop coming, and nothing in your analytics will ever show you the visits you did not receive. ' +
+            'This is almost always bot protection set too broadly: Cloudflare bot-fight mode, an AWS WAF rule, or a security plugin treating any non-browser request as an attack. ' +
+            'Ask whoever manages your hosting or CDN to allow the AI crawler user-agents through, and to return a proper response rather than stalling unknown ones. ' +
+            'Until that is done, nothing else in this report can help you: these assistants cannot read a single page of your site.',
+        },
+      };
+    }
+
     return {
       jsRenderWarning: false,
       renderMode: 'server_rendered',

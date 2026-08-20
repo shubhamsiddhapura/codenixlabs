@@ -44,7 +44,7 @@ const leadSchema = new Schema<LeadDoc>({
   scanId: { type: Schema.Types.ObjectId, ref: 'Scan', required: true, index: true },
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, trim: true, lowercase: true, index: true },
-  whatsapp: { type: String, required: true, trim: true },
+  whatsapp: { type: String, required: false, trim: true },
   submittedAt: { type: Date, default: Date.now },
   followUpStatus: {
     type: String,

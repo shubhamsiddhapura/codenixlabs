@@ -40,6 +40,8 @@ export interface ScanDoc extends Document {
   partial: boolean;
   /** No website could be read at this address — see whyNoWebsite in scanEngine. */
   noWebsite: boolean;
+  /** The site answered but refused every request, so nothing could be checked. */
+  unreadable: boolean;
   /** Which version of the scoring rules produced overallScore. */
   scoringVersion: string;
   comparisonScanId: Types.ObjectId | null;
@@ -124,6 +126,7 @@ const scanSchema = new Schema<ScanDoc>({
   jsRenderWarning: { type: Boolean, default: false },
   partial: { type: Boolean, default: false },
   noWebsite: { type: Boolean, default: false },
+  unreadable: { type: Boolean, default: false },
   scoringVersion: { type: String, default: '' },
   comparisonScanId: { type: Schema.Types.ObjectId, ref: 'Scan', default: null },
   unlocked: { type: Boolean, default: false },

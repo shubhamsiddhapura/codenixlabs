@@ -49,6 +49,15 @@ export interface ScanContext {
    * visibility without anyone noticing.
    */
   botProbes: Record<string, FetchResult>;
+  /**
+   * A browser was served where our scanner was not.
+   *
+   * Only set after the homepage failed. Turns "we could not reach you" into the
+   * far more useful "your server answers browsers and stalls everything else",
+   * which is a statement about how the site treats crawlers rather than about
+   * whether it is online.
+   */
+  browserReachable: boolean;
 
   sitemapFound: boolean;
   sitemapUrls: string[];
