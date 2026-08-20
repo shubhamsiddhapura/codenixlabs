@@ -486,6 +486,26 @@ export function toTeaser(scan: ScanDoc, cached: boolean): Record<string, unknown
       agentAccess: check.agentAccess,
       locked: Boolean(check.generatedFix),
     })),
+    /**
+     * The old name, kept deliberately for one release.
+     *
+     * Renaming `teaserChecks` to `checks` broke every browser that had already
+     * loaded the previous bundle: it read `teaser.checks`, got undefined, and
+     * white-screened on `.map`. The same is true in reverse for anyone holding
+     * a cached copy of the old frontend right now.
+     *
+     * Two views of the same array, so neither side can be caught out. Delete it
+     * once the deployed frontend has been on `checks` long enough that no cached
+     * bundle is still asking — there is no rush, it costs one key.
+     */
+    teaserChecks: scan.checks.map((check) => ({
+      checkId: check.checkId,
+      title: check.title,
+      status: check.status,
+      details: check.details,
+      agentAccess: check.agentAccess,
+      locked: Boolean(check.generatedFix),
+    })),
     lockedChecks: countFixes(scan),
     // Named in the teaser on purpose: "we generated the code to fix this" is
     // the strongest reason a visitor has to hand over an email (spec 3a).
