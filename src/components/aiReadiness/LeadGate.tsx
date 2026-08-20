@@ -37,10 +37,11 @@ export const LeadGate: React.FC<{
       <div className="absolute inset-0 opacity-40 bg-glow" aria-hidden="true" />
 
       <div className="relative z-10 p-6 sm:p-9">
-        <h2 className="text-2xl font-bold text-white font-orbitron sm:text-3xl">See your full report</h2>
+        <h2 className="text-2xl font-bold text-white font-orbitron sm:text-3xl">Get the fix code</h2>
         <p className="max-w-2xl mt-3 leading-relaxed text-neutral-300">
-          {describeGate(lockedChecks, fixesAvailable)} We will email you a copy so you can forward it to whoever maintains
-          your site.
+          {describeGate(lockedChecks, fixesAvailable)} We will email the whole report with the code in it, so you can
+          forward it straight to whoever maintains your site. The code is yours either way — there is no trial and
+          nothing to cancel.
         </p>
 
         <form
@@ -62,7 +63,7 @@ export const LeadGate: React.FC<{
           className="grid gap-5 mt-8"
         >
           <div className="grid gap-5 sm:grid-cols-3">
-            <Field id="lead-name" label="Your name" error={touched ? problems.name : undefined}>
+            <Field id="lead-name" label="Your name (optional)" error={touched ? problems.name : undefined}>
               <input
                 id="lead-name"
                 value={name}
@@ -87,7 +88,11 @@ export const LeadGate: React.FC<{
               />
             </Field>
 
-            <Field id="lead-whatsapp" label="WhatsApp number" error={touched ? problems.whatsapp : undefined}>
+            <Field
+              id="lead-whatsapp"
+              label="WhatsApp (optional — only if you want us to call)"
+              error={touched ? problems.whatsapp : undefined}
+            >
               <input
                 id="lead-whatsapp"
                 type="tel"
@@ -127,7 +132,7 @@ export const LeadGate: React.FC<{
               className="inline-flex items-center justify-center w-full gap-2 px-8 py-4 font-semibold text-white transition-all duration-300 rounded-full sm:w-auto bg-primary hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/30 disabled:opacity-50"
             >
               {busy ? <Loader2 size={18} className="animate-spin" aria-hidden="true" /> : null}
-              {busy ? 'Unlocking…' : 'Unlock my full report'}
+              {busy ? 'Sending…' : 'Show me the fix code'}
             </button>
 
             <p className="inline-flex items-center gap-2 text-xs text-neutral-400">
@@ -165,14 +170,22 @@ type LeadFields = Pick<LeadInput, 'name' | 'email' | 'whatsapp' | 'consent'>;
 function validate(lead: LeadFields): Partial<Record<keyof LeadFields, string>> {
   const problems: Partial<Record<keyof LeadFields, string>> = {};
 
-  if (lead.name.trim().length < 2) problems.name = 'Please enter your name.';
+  /**
+   * Email is the only thing we insist on.
+   *
+   * Every required field is a place someone leaves. Roughly five visitors in
+   * eighty finished this form when it demanded a name, an email and a phone
+   * number — and the phone number is where most people stop, because handing a
+   * stranger a number they can ring is a bigger ask than an address they can
+   * write to. We need one way to send the report; the rest is theirs to offer.
+   */
   if (!EMAIL_PATTERN.test(lead.email.trim())) problems.email = 'That does not look like a valid email address.';
 
-  // Indian mobiles are 10 digits; with a country code the range below covers
-  // the rest of the world. Same bounds the API enforces.
+  // Validated only when supplied. A malformed number is worse than a blank one,
+  // because it looks like a way to reach someone. Same bounds the API enforces.
   const digits = lead.whatsapp.replace(/\D/g, '');
-  if (digits.length < 8 || digits.length > 15) {
-    problems.whatsapp = 'Include your country code, e.g. +91 98765 43210.';
+  if (lead.whatsapp.trim() && (digits.length < 8 || digits.length > 15)) {
+    problems.whatsapp = 'That does not look right. Leave it blank if you would rather not.';
   }
 
   if (!lead.consent) problems.consent = 'Please tick the box so we know we may contact you.';
@@ -180,20 +193,24 @@ function validate(lead: LeadFields): Partial<Record<keyof LeadFields, string>> {
   return problems;
 }
 
+/**
+ * What is actually behind the form, in the plainest words available.
+ *
+ * It used to describe how many *checks* were hidden, because the gate hid the
+ * report. It hides the code now, and the code is a far easier thing to want —
+ * so the sentence names it, counts it, and says where it goes.
+ */
 function describeGate(lockedChecks: number, fixesAvailable: number): string {
-  const checksPart =
-    lockedChecks > 0
-      ? `${lockedChecks} more check${lockedChecks === 1 ? '' : 's'}, plus what each finding is costing you`
-      : 'the full breakdown of every finding and what it is costing you';
-
-  if (fixesAvailable > 0) {
-    return `${capitalise(checksPart)} — and we have already written ${fixesAvailable} ready-to-paste fix${
-      fixesAvailable === 1 ? '' : 'es'
-    } for the problems we found.`;
+  if (fixesAvailable <= 0) {
+    return 'Nothing here needs fixing, so there is no code to hand you — but we will email you the report if it is useful.';
   }
-  return `${capitalise(checksPart)}.`;
+
+  const fixes = `${fixesAvailable} ready-to-paste fix${fixesAvailable === 1 ? '' : 'es'}`;
+  const problems =
+    lockedChecks === 1 ? 'the problem we found' : `the ${lockedChecks} problems we found`;
+
+  return `We have already written ${fixes} for ${problems} above — the actual code, not a description of it.`;
 }
 
-const capitalise = (value: string): string => value.charAt(0).toUpperCase() + value.slice(1);
 
 export default LeadGate;

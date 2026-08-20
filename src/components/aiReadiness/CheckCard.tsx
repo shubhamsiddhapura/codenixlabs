@@ -19,11 +19,25 @@ const ICON: Record<CheckStatus, React.ReactNode> = {
  *   teaser   — verdict and the technical detail, no explanation (the free look)
  *   locked   — verdict only, with the reason to unlock stated on the card
  */
-export const CheckCard: React.FC<{ check: ScanCheck; variant: 'unlocked' | 'teaser' | 'locked'; index?: number }> = ({
-  check,
-  variant,
-  index = 0,
-}) => {
+/**
+ * One check, in one of two states.
+ *
+ * 'unlocked' — the fix code is present and rendered.
+ * 'gated'    — everything except the code: verdict, reasoning, evidence, and a
+ *              button where the code will go.
+ *
+ * There used to be a third state that showed nothing but a padlock, because the
+ * gate sat in front of the whole report. It came out with the gate. A card that
+ * says only "unlock to see what is wrong" gives a visitor no reason to believe
+ * there is anything worth unlocking.
+ */
+export const CheckCard: React.FC<{
+  check: ScanCheck;
+  variant: 'unlocked' | 'gated';
+  index?: number;
+  /** Called when someone asks for the fix. Scrolls them to the form. */
+  onUnlockFix?: () => void;
+}> = ({ check, variant, index = 0, onUnlockFix }) => {
   const [showDetail, setShowDetail] = useState(false);
   const style = STATUS_STYLE[check.status];
 
@@ -33,7 +47,7 @@ export const CheckCard: React.FC<{ check: ScanCheck; variant: 'unlocked' | 'teas
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-60px' }}
       transition={{ duration: 0.4, delay: Math.min(index * 0.06, 0.3) }}
-      className={`glass rounded-2xl p-6 ${variant === 'locked' ? 'opacity-70' : ''}`}
+      className="glass rounded-2xl p-6"
     >
       <header className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
@@ -47,13 +61,11 @@ export const CheckCard: React.FC<{ check: ScanCheck; variant: 'unlocked' | 'teas
           >
             {style.label}
           </span>
-          {variant === 'teaser' ? null : (
-            <span className="hidden text-xs sm:inline text-neutral-500 whitespace-nowrap">{formatPoints(check)}</span>
-          )}
+          <span className="hidden text-xs sm:inline text-neutral-500 whitespace-nowrap">{formatPoints(check)}</span>
         </div>
       </header>
 
-      {variant === 'unlocked' && check.humanExplanation ? (
+      {check.humanExplanation ? (
         /*
          * Paragraphs, but no separate width cap.
          *
@@ -72,17 +84,10 @@ export const CheckCard: React.FC<{ check: ScanCheck; variant: 'unlocked' | 'teas
         </div>
       ) : null}
 
-      {variant === 'teaser' ? (
+      {/* No explanation written for this check — fall back to the raw finding
+          rather than showing an empty card. */}
+      {!check.humanExplanation && check.details ? (
         <p className="mt-4 text-[17px] leading-[1.75] text-neutral-300">{check.details}</p>
-      ) : null}
-
-      {variant === 'locked' ? (
-        <p className="flex items-start gap-2 mt-4 text-neutral-400">
-          <Lock size={16} className="mt-1 flex-shrink-0 text-primary" aria-hidden="true" />
-          {check.generatedFixLanguage
-            ? 'Unlock to see what is wrong, why it costs you, and the code that fixes it.'
-            : 'Unlock to see what is wrong and why it costs you.'}
-        </p>
       ) : null}
 
       {/*
@@ -93,11 +98,42 @@ export const CheckCard: React.FC<{ check: ScanCheck; variant: 'unlocked' | 'teas
       */}
       {check.agentAccess?.length ? <AgentAccessTable rows={check.agentAccess} /> : null}
 
-      {variant === 'unlocked' && check.generatedFix ? (
+      {check.generatedFix ? (
         <FixBlock code={check.generatedFix} language={check.generatedFixLanguage} target={check.generatedFixTarget} />
       ) : null}
 
-      {variant === 'unlocked' && check.details ? (
+      {/*
+        Where the code would be, with a button instead.
+        
+        Deliberately shows the destination — "goes in your robots.txt" — so the
+        offer is concrete. "Unlock the full report" asks someone to buy an
+        envelope; "here is the file this changes" tells them what is inside.
+      */}
+      {variant === 'gated' && check.locked ? (
+        <div className="p-5 mt-5 border rounded-2xl border-primary/25 bg-primary/[0.06]">
+          <p className="flex items-start gap-2.5 text-[15px] leading-relaxed text-neutral-200">
+            <Lock size={16} className="mt-1 flex-shrink-0 text-primary" aria-hidden="true" />
+            <span>
+              We generated the code that fixes this
+              {check.generatedFixTarget ? (
+                <>
+                  {' '}— it goes in <span className="font-semibold text-white">{check.generatedFixTarget}</span>
+                </>
+              ) : null}
+              . It is yours to keep, whether or not you ever talk to us.
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={onUnlockFix}
+            className="mt-4 rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-white transition-all duration-300 hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/30"
+          >
+            Show me the fix
+          </button>
+        </div>
+      ) : null}
+
+      {check.humanExplanation && check.details ? (
         <div className="mt-4">
           <button
             type="button"

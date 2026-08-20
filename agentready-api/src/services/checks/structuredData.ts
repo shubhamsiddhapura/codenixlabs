@@ -136,6 +136,32 @@ export function checkStructuredData(context: ScanContext): CheckOutcome {
     };
   }
 
+  /**
+   * They published the parent type. That is most of the way there.
+   *
+   * Checked before the confidence-based branch below and regardless of how sure
+   * we are about the site type, because this is not a question of whether we
+   * guessed right — Organization is a correct and useful thing for a clinic,
+   * a marketplace or a shop to publish. It is simply less specific than the
+   * subtype that would serve an assistant best.
+   */
+  const broader = broaderMatches(readablePages, profile);
+  if (!withSchema.length && broader.length) {
+    return {
+      ...base,
+      status: 'warning',
+      details: `No ${profile.label} markup, but ${broader.join(', ')} found on ${readablePages.length} page(s) — the more general form of the same thing.`,
+      humanExplanation:
+        `You publish ${joinWords(broader)} markup, which is the general form of what we look for here — machines can already tell what entity your pages describe. ` +
+        `What would serve an assistant better is ${profile.label}, the more specific version: ${profile.why} ` +
+        `${profile.label} is a more precise kind of ${joinWords(broader)}, so this is a refinement of what you already have rather than a rewrite — in most cases it is a one-word change to the "@type" line plus a few extra fields. ` +
+        'We have not counted this against you in full, because publishing the parent type is genuinely most of the work and far better than publishing nothing. The block below shows the more specific version.' +
+        clientRenderWarning(context.homepage),
+      generatedFix: fix,
+      generatedFixTarget: profile.fixTarget,
+    };
+  }
+
   const otherSchema = otherSchemaTypes(readablePages, profile);
   if (!withSchema.length && context.siteTypeConfidence !== 'high' && otherSchema.length) {
     return {
@@ -330,6 +356,70 @@ const MEANINGFUL_SCHEMA = new Set([
   'course',
   'jobposting',
 ]);
+
+/**
+ * The more general form of each type we ask for.
+ *
+ * schema.org is a hierarchy: LocalBusiness *is an* Organization, Article *is a*
+ * CreativeWork. A site publishing the parent has done the general version of the
+ * right thing — it has told machines what entity the page is about — and the
+ * only thing missing is precision.
+ *
+ * practo.com publishes Organization. We wanted LocalBusiness, found no exact
+ * match, and awarded zero out of twenty-eight. That reads as "you have no
+ * structured data" to someone who has plainly written some, which is the fastest
+ * way to have the whole report dismissed. Being less specific than ideal is a
+ * note, not a failure.
+ */
+const BROADER_FORMS: Record<string, string[]> = {
+  localbusiness: ['organization', 'corporation'],
+  store: ['localbusiness', 'organization'],
+  restaurant: ['localbusiness', 'organization'],
+  medicalorganization: ['organization'],
+  professionalservice: ['localbusiness', 'organization'],
+  softwareapplication: ['product', 'creativework'],
+  article: ['creativework', 'blogposting', 'newsarticle'],
+  product: ['offer', 'itempage'],
+  organization: ['website', 'webpage'],
+};
+
+/** Types on the page that are a more general form of what this profile wants. */
+function broaderMatches(pages: HtmlDocument[], profile: SchemaProfile): string[] {
+  const wanted = profile.label.toLowerCase();
+  const broader = new Set(BROADER_FORMS[wanted] ?? []);
+  if (!broader.size) return [];
+
+  const found = new Set<string>();
+  for (const page of pages) {
+    for (const node of page.jsonLd()) {
+      for (const type of typesOf(node)) {
+        // typesOf normalises case for matching; the report should show the name
+        // the way schema.org writes it, or "organization found" reads like a
+        // typo in a document that is asking to be trusted.
+        if (broader.has(type.toLowerCase())) found.add(schemaCase(type));
+      }
+    }
+  }
+  return [...found].sort();
+}
+
+/** schema.org type names are PascalCase — LocalBusiness, not localbusiness. */
+function schemaCase(type: string): string {
+  const canonical: Record<string, string> = {
+    organization: 'Organization',
+    corporation: 'Corporation',
+    localbusiness: 'LocalBusiness',
+    creativework: 'CreativeWork',
+    blogposting: 'BlogPosting',
+    newsarticle: 'NewsArticle',
+    website: 'WebSite',
+    webpage: 'WebPage',
+    itempage: 'ItemPage',
+    product: 'Product',
+    offer: 'Offer',
+  };
+  return canonical[type.toLowerCase()] ?? type;
+}
 
 function otherSchemaTypes(pages: HtmlDocument[], profile: SchemaProfile): string[] {
   const found = new Set<string>();

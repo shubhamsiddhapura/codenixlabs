@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet-async';
 import { Link, useSearchParams } from 'react-router-dom';
-import { BotIcon, Code2, Eye, FileSearch, Gauge, Lock, ShieldCheck } from 'lucide-react';
+import { BotIcon, Code2, Eye, FileSearch, Gauge, ShieldCheck } from 'lucide-react';
 
 import ScanForm from '../components/aiReadiness/ScanForm';
 import ResultHeader from '../components/aiReadiness/ResultHeader';
@@ -15,9 +15,10 @@ import ScanProgress from '../components/aiReadiness/ScanProgress';
 import ScanCounter from '../components/aiReadiness/ScanCounter';
 import RunHistory from '../components/aiReadiness/RunHistory';
 import SampleReport from '../components/aiReadiness/SampleReport';
-import NoWebsiteNotice from '../components/aiReadiness/NoWebsiteNotice';
+import NoGradeNotice from '../components/aiReadiness/NoGradeNotice';
 
 import { AiReadinessError, compareScan, startScan, unlockScan } from '../services/aiReadinessService';
+import { isUngraded } from '../types/aiReadiness';
 import type { ComparisonResult, FullScan, LeadInput, SiteType, TeaserScan } from '../types/aiReadiness';
 
 /**
@@ -46,6 +47,18 @@ const AiReadiness: React.FC = () => {
   // Kept so a re-classification can re-scan without the visitor retyping.
   const [lastUrl, setLastUrl] = useState('');
   const resultsRef = useRef<HTMLDivElement>(null);
+  /**
+   * Where "show me the fix" takes someone.
+   *
+   * The form is at the bottom of a long report, so a button that silently
+   * enabled a field far below the fold would look like it had done nothing.
+   * Scrolling to it is the difference between an invitation and a dead click.
+   */
+  const unlockRef = useRef<HTMLDivElement>(null);
+
+  const goToUnlock = (): void => {
+    unlockRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
 
   const runScan = async (url: string, siteType?: SiteType, refresh = false): Promise<void> => {
     setScanning(true);
@@ -220,10 +233,11 @@ const AiReadiness: React.FC = () => {
           grade, no checks, and no lead gate, because nothing has been withheld
           to unlock.
         */}
-        {teaser?.noWebsite ? (
-          <NoWebsiteNotice
+        {teaser && isUngraded(teaser) ? (
+          <NoGradeNotice
             domain={teaser.domain}
             summary={teaser.summary}
+            reason={teaser.noWebsite ? 'absent' : 'refused'}
             onScanAnother={() => {
               setTeaser(null);
               window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -231,7 +245,7 @@ const AiReadiness: React.FC = () => {
           />
         ) : null}
 
-        {teaser && !teaser.noWebsite && !fullScan ? (
+        {teaser && !isUngraded(teaser) && !fullScan ? (
           <section className="relative py-12">
             <div className="container max-w-3xl px-4 mx-auto sm:px-6 lg:px-8">
               <ResultHeader
@@ -250,30 +264,24 @@ const AiReadiness: React.FC = () => {
                 busy={scanning}
               />
 
+              {/*
+                The whole report, free. Each card that has a fix waiting shows a
+                locked block with a button rather than hiding that a fix exists —
+                someone has to be able to see what they would be getting.
+              */}
               <div className="grid gap-4 mt-8">
-                {teaser.teaserChecks.map((check, index) => (
+                {teaser.checks.map((check, index) => (
                   <CheckCard
                     key={check.checkId}
-                    variant="teaser"
+                    variant="gated"
                     index={index}
-                    check={{
-                      ...check,
-                      pointsAwarded: 0,
-                      pointsPossible: 0,
-                      humanExplanation: null,
-                      generatedFix: null,
-                      generatedFixLanguage: null,
-                      generatedFixTarget: null,
-                    }}
+                    check={check}
+                    onUnlockFix={goToUnlock}
                   />
-                ))}
-
-                {Array.from({ length: teaser.lockedChecks }).map((_, index) => (
-                  <LockedPlaceholder key={index} />
                 ))}
               </div>
 
-              <div className="mt-10">
+              <div ref={unlockRef} className="mt-10 scroll-mt-28">
                 <LeadGate
                   lockedChecks={teaser.lockedChecks}
                   fixesAvailable={teaser.fixesAvailable}
@@ -327,15 +335,6 @@ const AiReadiness: React.FC = () => {
   );
 };
 
-const LockedPlaceholder: React.FC = () => (
-  <div aria-hidden="true" className="flex items-center gap-4 p-6 border border-dashed rounded-2xl border-white/10 bg-white/[0.02]">
-    <Lock size={18} className="flex-shrink-0 text-neutral-600" />
-    <div className="flex-1 space-y-3">
-      <div className="h-3 rounded w-2/5 bg-white/[0.06]" />
-      <div className="h-2.5 rounded w-4/5 bg-white/[0.04]" />
-    </div>
-  </div>
-);
 
 const FullReport: React.FC<{
   scan: FullScan;

@@ -88,13 +88,23 @@ export interface TeaserScan {
   overallGrade: Grade;
   overallScore: number;
   summary: string;
-  teaserChecks: Pick<ScanCheck, 'checkId' | 'title' | 'status' | 'details' | 'agentAccess' | 'locked'>[];
+  /**
+   * Every check, with its reasoning. `generatedFix` is null until unlocked.
+   *
+   * Was `teaserChecks` and carried two of seven. The rename is the point: this
+   * is the report now, not a sample of it, and calling it a teaser would keep
+   * inviting code that treats it as partial.
+   */
+  checks: ScanCheck[];
+  /** How many checks have a fix waiting behind the form. */
   lockedChecks: number;
   fixesAvailable: number;
   jsRenderWarning: boolean;
   partial: boolean;
-  /** No website could be read at this address — see NoWebsiteNotice. */
+  /** No website could be read at this address — see NoGradeNotice. */
   noWebsite: boolean;
+  /** The site answered but refused everything, so no check could run. */
+  unreadable: boolean;
   scanDurationMs: number;
   cached: boolean;
 }
@@ -118,6 +128,7 @@ export interface FullScan {
   jsRenderWarning: boolean;
   partial: boolean;
   noWebsite: boolean;
+  unreadable: boolean;
   comparisonScanId: string | null;
   unlocked: boolean;
   fixesAvailable?: number;
@@ -131,6 +142,17 @@ export interface FullScan {
  * consent record that does not match what was on screen evidences nothing, and
  * wording drifts the moment the two live in separate files.
  */
+/**
+ * Both reasons a scan comes back without a grade.
+ *
+ * Derived in one place on purpose. Two booleans that each mean "do not show a
+ * score" is exactly the shape of thing where one gets checked and the other
+ * forgotten, and the cost of forgetting is publishing F/0 about a website
+ * nobody could see.
+ */
+export const isUngraded = (scan: { noWebsite: boolean; unreadable: boolean }): boolean =>
+  scan.noWebsite || scan.unreadable;
+
 export const CONSENT_TEXT =
   'I agree that Codenix Labs may email me this report and contact me on WhatsApp about fixing what it finds. You can ask us to delete your details at any time.';
 

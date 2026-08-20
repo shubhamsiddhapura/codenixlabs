@@ -93,7 +93,25 @@ export interface SitemapResult {
   found: boolean;
   urls: string[];
   sources: string[];
+  /**
+   * URLs that came out of a sitemap the site itself labelled as products.
+   *
+   * The strongest product signal there is, and we were throwing it away.
+   * snitch.com advertises `sitemap-products-1.xml` in its robots.txt and fills
+   * it with 5,000 product pages — none of which contain "/product/" in the path,
+   * because their URLs read `/men-jeans/slim-fit-washed-jeans-4bje006-02/
+   * 9261366542498/buy`. We recognised zero of them and reported "none of the
+   * pages we sampled were individual product pages", on a store whose products
+   * we had a complete list of.
+   *
+   * Guessing a platform's URL shape will always be a losing game — every store
+   * invents its own. A file the site names "products" is not a guess.
+   */
+  productUrls: string[];
 }
+
+/** A sitemap whose own filename says what is in it. */
+const PRODUCT_SITEMAP = /sitemap[-_]?(products?|items?|catalog)/i;
 
 /**
  * Collect URLs from the site's sitemap, following a sitemap index one level
@@ -109,8 +127,17 @@ export async function collectSitemapUrls(
     .filter((url) => isSameSite(url, origin))
     .slice(0, 3);
 
+  /**
+   * Enough is enough. selectKeyPages reads at most the first 1000 entries, so
+   * everything past that is bandwidth and parsing time spent on URLs no part of
+   * the scan will ever look at — and a large store's sitemap runs to tens of
+   * thousands.
+   */
+  const ENOUGH_URLS = 1000;
+
   const urls: string[] = [];
   const sources: string[] = [];
+  const productUrls: string[] = [];
   let found = false;
 
   for (const candidate of candidates) {
@@ -127,25 +154,29 @@ export async function collectSitemapUrls(
 
     if (!isSitemapIndex(response.body)) {
       urls.push(...locs);
+      if (PRODUCT_SITEMAP.test(candidate)) productUrls.push(...locs);
       continue;
     }
 
     // Sitemap index: follow the children most likely to hold content first.
     const children = locs
       .filter((loc) => isSameSite(loc, origin))
-      .sort((a, b) => childPriority(b) - childPriority(a))
+      // A child the site named "products" outranks anything we could infer.
+      .sort((a, b) => (PRODUCT_SITEMAP.test(b) ? 1 : 0) - (PRODUCT_SITEMAP.test(a) ? 1 : 0) || childPriority(b) - childPriority(a))
       .slice(0, 2);
 
     for (const child of children) {
-      if (deadline.expired()) break;
+      if (deadline.expired() || urls.length >= ENOUGH_URLS) break;
       const childResponse = await fetchUrl(child, deadline);
       if (!childResponse.ok || !childResponse.body) continue;
       sources.push(child);
-      urls.push(...parseSitemapLocs(childResponse.body));
+      const childLocs = parseSitemapLocs(childResponse.body);
+      urls.push(...childLocs);
+      if (PRODUCT_SITEMAP.test(child)) productUrls.push(...childLocs);
     }
   }
 
-  return { found, urls: [...new Set(urls)], sources };
+  return { found, urls: [...new Set(urls)], sources, productUrls: [...new Set(productUrls)] };
 }
 
 /** Prefer child sitemaps whose name suggests content over ones full of tags. */
@@ -180,6 +211,16 @@ export function selectKeyPages(
   sitemapUrls: string[],
   siteType: SiteType,
   limit: number,
+  /**
+   * URLs the site's own sitemap filename declared to be products.
+   *
+   * Taken on trust and ahead of everything else. Every store invents its own URL
+   * shape — snitch.com's products live at `/men-jeans/<slug>/<id>/buy`, with no
+   * "product" anywhere in the path — so pattern-matching the path will always
+   * miss some, and it missed all 5,000 of theirs. A file the site itself named
+   * "products" is evidence rather than inference, and outranks our guessing.
+   */
+  declaredProductUrls: string[] = [],
 ): KeyPageSelection {
   const candidates: string[] = [];
   const seen = new Set<string>([stripTrailingSlash(homepage.url)]);
@@ -195,6 +236,12 @@ export function selectKeyPages(
   };
 
   const onProfile = (url: string): boolean => looksLikeKeyUrl(url, siteType);
+
+  // Declared products first, so the cap is spent on pages we know are products
+  // rather than on links that merely look like they might be.
+  if (siteType === 'ecommerce') {
+    for (const url of declaredProductUrls.slice(0, 200)) consider(url, () => true);
+  }
 
   for (const link of homepage.links()) consider(link.url, onProfile);
 

@@ -119,6 +119,22 @@ export const LIVE_PROBE_BOTS: { agent: string; label: string; userAgent: string 
   },
 ];
 
+/**
+ * Crawlers that only feed training corpora, never a live answer.
+ *
+ * CCBot fetches pages for the Common Crawl dataset. Blocking it is a deliberate
+ * and extremely common decision — it is the standard way to say "do not use my
+ * content for training" — and it does not stop ChatGPT, Claude or Perplexity
+ * answering a question about the site today, because none of them fetch through
+ * it.
+ *
+ * noise.com was refused for CCBot and nothing else, and scored 0 out of 22 on
+ * the heaviest check in the report. We were failing a site for exercising a
+ * choice the industry explicitly offers it, and calling that an AI visibility
+ * problem when their visibility was untouched.
+ */
+const TRAINING_ONLY_BOTS = new Set(['CCBot']);
+
 export const AI_BOTS: { agent: string; label: string }[] = [
   { agent: 'GPTBot', label: 'ChatGPT (training + browsing)' },
   { agent: 'ChatGPT-User', label: 'ChatGPT (when a user asks about you)' },
@@ -158,6 +174,12 @@ export const AI_BOTS: { agent: string; label: string }[] = [
  * `/` or the end of the string after the word keeps `/collections/cart-bags`
  * and `/products/admin-chair` out, which a loose match would swallow.
  */
+/**
+ * How many sampled pages it takes before "all of them are blocked" means
+ * anything. One page is not a sample, it is an anecdote.
+ */
+const MIN_SAMPLE_FOR_TOTAL_BLOCK = 2;
+
 const SEGMENT = String.raw`(?:^|/)`;
 const SEGMENT_END = String.raw`(?:/|$|\b)`;
 
@@ -292,19 +314,24 @@ function isHousekeeping(rulePath: string, siteType: SiteType): boolean {
  * which one this site uses, so a rule blocking *any* of them is a genuine
  * finding rather than a coincidence.
  */
+const FALLBACK_KEY_PATHS: Record<string, string[]> = {
+  ecommerce: ['/products/sample-product', '/product/sample-product', '/shop/sample-product'],
+  content: ['/blog/sample-post', '/posts/sample-post', '/article/sample-post'],
+  saas: ['/pricing', '/features', '/docs'],
+  local_business: ['/services', '/contact', '/about'],
+  general: ['/about', '/services', '/contact'],
+};
+
+/** The URL shapes this kind of site typically uses, for testing rule breadth. */
+function fallbackPathsFor(siteType: SiteType): string[] {
+  return FALLBACK_KEY_PATHS[siteType] || FALLBACK_KEY_PATHS.general;
+}
+
 function keyProbePaths(context: ScanContext): { paths: string[]; sampled: boolean } {
   const sampled = context.keyPages.map((page) => pathOf(page.url));
   if (sampled.length) return { paths: sampled, sampled: true };
 
-  const fallbacks: Record<string, string[]> = {
-    ecommerce: ['/products/sample-product', '/product/sample-product', '/shop/sample-product'],
-    content: ['/blog/sample-post', '/posts/sample-post', '/article/sample-post'],
-    saas: ['/pricing', '/features', '/docs'],
-    local_business: ['/services', '/contact', '/about'],
-    general: ['/about', '/services', '/contact'],
-  };
-
-  return { paths: fallbacks[context.siteType] || fallbacks.general, sampled: false };
+  return { paths: fallbackPathsFor(context.siteType), sampled: false };
 }
 
 interface BotVerdict {
@@ -457,6 +484,29 @@ export function checkBotAccess(context: ScanContext): CheckOutcome {
     };
   }
 
+  /**
+   * Only training crawlers were turned away, so live answers are unaffected.
+   *
+   * Reported so the owner knows it is happening — it may not be intentional —
+   * but never as a failure of AI access, because no assistant reaches them
+   * through these.
+   */
+  if (homepageServedUs && refused.length && refused.every((bot) => TRAINING_ONLY_BOTS.has(bot.agent))) {
+    const names = refused.map((bot) => bot.label).join(', ');
+    return {
+      ...base,
+      status: 'warning',
+      details: `Server refused ${names} — training-corpus crawlers only. Live assistant crawlers were served normally.`,
+      humanExplanation:
+        `Your server turns away ${names}, which collects pages for the open dataset that AI models are trained on. Everything that answers a live question — ChatGPT, Claude, Perplexity, Copilot — was served your homepage normally, so your visibility in assistants today is unaffected. ` +
+        'Plenty of sites block this on purpose: it is the standard way to say "do not train on my content", and if that was your decision, nothing here needs changing. ' +
+        'It is only worth a look if you did not know it was happening, because being in that dataset is one of the ways a model comes to know your brand exists at all — a slower and more indirect route than being fetched live, but a real one.',
+      generatedFix: null,
+      generatedFixLanguage: null,
+      generatedFixTarget: null,
+    };
+  }
+
   if (homepageServedUs && refused.length) {
     const names = refused.map((bot) => bot.label).join(', ');
     const statuses = refused
@@ -557,7 +607,47 @@ export function checkBotAccess(context: ScanContext): CheckOutcome {
     const rootDecision = isAllowed(robots!, agent, '/');
     const keyDecisions = probePaths.map((path) => isAllowed(robots!, agent, path));
     const blockedDecisions = keyDecisions.filter((decision) => !decision.allowed);
-    const keyPagesBlocked = sampled ? blockedDecisions.length === keyDecisions.length : blockedDecisions.length > 0;
+    /**
+     * "All the key pages are blocked" needs more than one key page.
+     *
+     * The rule exists so a single odd page cannot fail the check — a store with
+     * five product pages and a disallow on one of them is not shut out. But when
+     * the sample *is* one page, "all of them" is satisfied by that one, and the
+     * report goes from a single disallowed URL to "blocked from main pages:
+     * GPTBot, ClaudeBot, PerplexityBot…" for all eleven crawlers.
+     *
+     * zoho.com is the case in point. Its robots.txt allows every AI crawler at
+     * the root — we verified each one — and we accused it of blocking all of
+     * them, off one sampled page. That is the most damaging thing this tool can
+     * get wrong: a site owner who checks will find we were plainly lying, and
+     * nothing else in the report survives that.
+     *
+     * With a sample this thin, a total block has to be corroborated by the root
+     * being disallowed too. Otherwise it falls through to the warning below,
+     * which names the blocked paths without claiming the site is shut.
+     */
+    const thinSample = keyDecisions.length < MIN_SAMPLE_FOR_TOTAL_BLOCK;
+    const allKeyPagesBlocked = blockedDecisions.length === keyDecisions.length && keyDecisions.length > 0;
+
+    /**
+     * With one page in hand, ask whether the rule is broad or specific.
+     *
+     * `Disallow: /products/` shuts the entire catalogue — the sample size is
+     * beside the point, and downgrading that to a warning would hide the most
+     * serious finding this check has. A rule that blocks one particular URL is a
+     * different thing entirely, and that is what zoho.com had.
+     *
+     * The test is whether the same rules also block this site type's typical
+     * key-page shapes. If they do, the block is categorical and the sample was
+     * simply small. If they do not, we have one blocked page and no grounds to
+     * announce that eleven crawlers are shut out.
+     */
+    const blockIsCategorical =
+      !rootDecision.allowed || fallbackPathsFor(context.siteType).some((path) => !isAllowed(robots!, agent, path).allowed);
+
+    const keyPagesBlocked = sampled
+      ? allKeyPagesBlocked && (!thinSample || blockIsCategorical)
+      : blockedDecisions.length > 0;
 
     const blockingRule =
       keyDecisions.find((decision) => !decision.allowed)?.rule || (rootDecision.allowed ? null : rootDecision.rule);

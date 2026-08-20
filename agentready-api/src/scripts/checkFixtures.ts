@@ -8,13 +8,14 @@
  * warning" boundary, the score normalisation when a check is skipped, and the
  * site-type classification that decides what every other check expects.
  */
+import { gzipSync, gunzipSync } from 'zlib';
 import { CheckOutcome, CheckStatus, SiteType } from '../types';
 import { Deadline, FetchFailure, FetchResult } from '../services/fetcher';
 import { HtmlDocument, typesOf } from '../services/htmlDocument';
 import { ScanContext } from '../services/scanContext';
 import { parseRobotsTxt } from '../services/robotsTxt';
 import { SITE_PROFILES, detectSiteType, profileFor } from '../services/siteType';
-import { checkBotAccess } from '../services/checks/botAccess';
+import { CONTROL_BOT, checkBotAccess } from '../services/checks/botAccess';
 import { checkAgentInterface } from '../services/checks/agentInterface';
 import { checkStructuredData } from '../services/checks/structuredData';
 import { SHIPPING_TOPIC, checkTrustSignals } from '../services/checks/trustSignals';
@@ -42,6 +43,21 @@ function assert(label: string, condition: boolean, detail = ''): void {
 function assertStatus(label: string, outcome: CheckOutcome, expected: CheckStatus): void {
   assert(label, outcome.status === expected, `expected ${expected}, got ${outcome.status}: ${outcome.details}`);
 }
+
+/** Mirrors the fetcher's magic-byte check, so the fixture tests the real rule. */
+function decompressForTest(raw: Buffer): string {
+  if (raw.length >= 2 && raw[0] === 0x1f && raw[1] === 0x8b) {
+    try {
+      return gunzipSync(raw).toString('utf8');
+    } catch {
+      return raw.toString('utf8');
+    }
+  }
+  return raw.toString('utf8');
+}
+
+const parseSitemapLocsForTest = (xml: string): string[] =>
+  [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1]);
 
 // --- Fixture builders -----------------------------------------------------
 
@@ -91,6 +107,7 @@ function context(overrides: Partial<ScanContext> = {}): ScanContext {
     agentArtifacts: { ucp: MISSING, 'llms.txt': MISSING },
     // No live probes by default — individual cases opt in.
     botProbes: {},
+    browserReachable: false,
     sitemapFound: false,
     sitemapUrls: [],
     siteName: 'Test Store',
@@ -994,7 +1011,17 @@ console.log('\nCheck 6 — crawlability');
   assert('a domain with no DNS record is not a website', whyNoWebsite(dead('dns')) === 'dns');
   assert('  a refused connection is not either', whyNoWebsite(dead('connection_refused')) === 'unreachable');
   // `network` deliberately no longer lands here — see the catch-all note below.
-  assert('  nor a timeout', whyNoWebsite(dead('timeout')) === 'timeout');
+  /**
+   * A timeout no longer means "no website", and myntra.com is why.
+   *
+   * It answers a browser in one second with 448KB, and never answers our scanner
+   * at all — held open and silent, which is what a WAF does to an unrecognised
+   * bot rather than returning 403. We waited 17 seconds and told one of India's
+   * largest retailers it had no website. A timeout cannot tell "down" from
+   * "stalling us specifically", so the engine sends one browser-shaped request
+   * to find out instead of guessing.
+   */
+  assert('  a timeout is not proof of absence — it may be us being stalled', whyNoWebsite(dead('timeout')) === null);
   assert('  nor a broken certificate', whyNoWebsite(dead('ssl')) === 'ssl');
   assert('  nor a redirect loop', whyNoWebsite(dead('redirect_loop')) === 'redirect_loop');
   assert('  the parking case still routes here', whyNoWebsite(page(parkingPage)) === 'parked');
@@ -1058,8 +1085,27 @@ console.log('\nCheck 6 — crawlability');
   assert('  sets the JS-render flag for the report banner', spa.jsRenderWarning);
   assert('  uses the exact wording the spec asks for', spa.outcome.humanExplanation.includes('may require JavaScript to load content'));
 
-  const blocked = checkCrawlability(context({ homepage: page('Attention Required! | Cloudflare', { status: 403, ok: false, blocked: true }) }));
-  assertStatus('403 / bot challenge → fail', blocked.outcome, 'fail');
+  /**
+   * A 403 means two completely different things depending on who else got one.
+   *
+   * If a plain browser is served and we are not, the site is filtering by
+   * user-agent and the AI crawlers are in real trouble — that is a failure. If
+   * the browser is refused too, we are being filtered by network address, the
+   * site works fine for its customers, and we have learned nothing about how it
+   * treats ChatGPT. croma.com, pepperfry.com and wakefit.co are all the second
+   * kind, and we scored all three F, 0 out of 100.
+   */
+  const challenge = page('Attention Required! | Cloudflare', { status: 403, ok: false, blocked: true });
+
+  const blockedEveryone = checkCrawlability(context({ homepage: challenge, browserReachable: false }));
+  assertStatus('403 to us and to a browser → not scored', blockedEveryone.outcome, 'skipped');
+  assert(
+    '  and says the filtering is by network, not user-agent',
+    blockedEveryone.outcome.humanExplanation.includes('where the request came from'),
+  );
+
+  const blocked = checkCrawlability(context({ homepage: challenge, browserReachable: true }));
+  assertStatus('403 to us but a browser is served → fail', blocked.outcome, 'fail');
   assert("  uses the spec's \"couldn't access your site\" wording", blocked.outcome.humanExplanation.includes("We couldn't access your site directly"));
 
   assertStatus('DNS failure → fail', checkCrawlability(context({ homepage: page('', { ok: false, status: null, failure: 'dns' }) })).outcome, 'fail');
@@ -1154,6 +1200,126 @@ console.log('\nMicrodata and RDFa');
 }
 
 // --- Deadline ---------------------------------------------------------------
+
+console.log('\nGzipped sitemaps');
+{
+  /**
+   * Gzipped sitemaps are the norm at scale, not an oddity.
+   *
+   * booking.com declares 354 sitemaps whose children are all .xml.gz. We fetched
+   * them, read the compressed bytes as text, found no <loc> tags and concluded
+   * the site had nothing worth sampling. axios undoes Content-Encoding for us;
+   * nothing undoes a file that is itself an archive.
+   */
+  const xml = '<?xml version="1.0"?><urlset><url><loc>https://shop.test/products/a</loc></url></urlset>';
+  const gz = gzipSync(Buffer.from(xml, 'utf8'));
+
+  const asText = page('', { body: gz.toString('utf8'), contentType: 'application/gzip' });
+  assert('a gzipped sitemap read as text yields nothing', !asText.$ || parseSitemapLocsForTest(gz.toString('utf8')).length === 0);
+
+  const decompressed = decompressForTest(gz);
+  assert('  but the bytes decompress to the real XML', decompressed.includes('<loc>'), decompressed.slice(0, 60));
+  assert('  and plain XML is passed through untouched', decompressForTest(Buffer.from(xml, 'utf8')) === xml);
+}
+
+
+console.log('\nSchema type hierarchy');
+{
+  /**
+   * schema.org is a hierarchy and the check has to respect it.
+   *
+   * practo.com publishes Organization; we wanted LocalBusiness, found no exact
+   * match and awarded zero of twenty-eight. But LocalBusiness *is an*
+   * Organization — they had done the general form of the right thing, and the
+   * only thing missing was precision. Zero reads as "you have no structured
+   * data" to someone who has plainly written some.
+   */
+  const withOrg = page(
+    '<html><head><script type="application/ld+json">' +
+      '{"@context":"https://schema.org","@type":"Organization","name":"Practo","url":"https://practo.test"}' +
+      '</script></head><body><h1>Clinic finder</h1><p>' + 'Find doctors near you. '.repeat(40) + '</p></body></html>',
+  );
+
+  const parentOnly = checkStructuredData(context({ siteType: 'local_business', siteTypeConfidence: 'high', homepage: withOrg, keyPages: [] }));
+  assertStatus('the parent schema type earns partial credit, not zero', parentOnly, 'warning');
+  assert('  and names what was found', parentOnly.details.includes('Organization'), parentOnly.details);
+  assert(
+    '  and explains it is a refinement rather than a rewrite',
+    parentOnly.humanExplanation.includes('more specific'),
+  );
+
+  const nothing = checkStructuredData(
+    context({ siteType: 'local_business', siteTypeConfidence: 'high', homepage: page(PLAIN_HOMEPAGE), keyPages: [] }),
+  );
+  assertStatus('  a page with no markup at all still fails', nothing, 'fail');
+}
+
+
+console.log('\nTraining crawlers vs live assistants');
+{
+  /**
+   * Blocking Common Crawl is not an AI visibility problem.
+   *
+   * noise.com refused CCBot and nothing else, and scored 0 of 22 on the heaviest
+   * check in the report. CCBot feeds a training dataset; no assistant answers a
+   * question through it, and blocking it is the standard, deliberate way to opt
+   * out of training. Refusing GPTBot is a completely different matter and must
+   * still fail.
+   */
+  const ALLOW_ALL = 'User-agent: *\nAllow: /\n';
+  const refusing = (agent: string) =>
+    context({
+      homepage: page(PLAIN_HOMEPAGE),
+      robotsTxt: response({ body: ALLOW_ALL, contentType: 'text/plain' }),
+      robots: parseRobotsTxt(ALLOW_ALL),
+      botProbes: {
+        [CONTROL_BOT.agent]: response({ status: 200, ok: true }),
+        [agent]: response({ status: 403, ok: false, blocked: true }),
+      },
+    });
+
+  assertStatus('only a training crawler refused -> warning, not fail', checkBotAccess(refusing('CCBot')), 'warning');
+  assert(
+    '  and says live assistants are unaffected',
+    checkBotAccess(refusing('CCBot')).humanExplanation.includes('unaffected'),
+  );
+  assertStatus('a live assistant crawler refused -> still fails', checkBotAccess(refusing('GPTBot')), 'fail');
+}
+
+
+console.log('\nUnanswered vs absent');
+{
+  /**
+   * The distinction the scanner kept getting wrong, pinned in one place.
+   *
+   * A 404 is the server telling us the file is not there. A timeout is the
+   * server telling us nothing at all. Collapsing the second into the first is
+   * how mcaffeine.com went from pass to fail between two runs with nothing
+   * about the site having changed — the same mistake as reading a 429 as a
+   * block, or our own clock as their outage.
+   */
+  /**
+   * Deliberately a store, where the manifest is actually scored. On a blog or a
+   * clinic this check is weighted zero by design, so it returns "skipped"
+   * whatever happens and would prove nothing either way.
+   */
+  const artifactCtx = (overrides: Partial<FetchResult>) =>
+    context({
+      siteType: 'ecommerce',
+      agentArtifacts: {
+        ucp: response({ requestedUrl: 'https://shop.test/.well-known/ucp', ...overrides }),
+        'llms.txt': response({ requestedUrl: 'https://shop.test/llms.txt', ...overrides }),
+      },
+    });
+
+  const timedOut = checkAgentInterface(artifactCtx({ ok: false, status: null, failure: 'timeout' as FetchFailure }));
+  assertStatus('an artefact that never answered is not scored', timedOut, 'skipped');
+  assert('  and does not claim the file is missing', !timedOut.details.includes('No agent interface found'), timedOut.details);
+
+  const genuine404 = checkAgentInterface(artifactCtx({ ok: false, status: 404, body: '' }));
+  assertStatus('  a genuine 404 still fails — that is an answer', genuine404, 'fail');
+}
+
 
 console.log('\nDeadline');
 {

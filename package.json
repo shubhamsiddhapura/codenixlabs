@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "dev:all": "concurrently \"vite\" \"node SERVER/index.js\" \"npm --prefix agentready-api run dev:memory\""
+    "dev:all": "concurrently \"vite\" \"node SERVER/index.js\" \"npm --prefix agentready-api run dev:memory\"",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",

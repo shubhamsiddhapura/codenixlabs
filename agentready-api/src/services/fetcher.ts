@@ -1,4 +1,5 @@
 import axios, { AxiosError, AxiosResponse } from 'axios';
+import { gunzipSync } from 'zlib';
 import { config } from '../config';
 
 export type FetchFailure =
@@ -61,7 +62,7 @@ export interface FetchResult {
  * request that could not finish in time.
  */
 export class Deadline {
-  private readonly endsAt: number;
+  private endsAt: number;
 
   /**
    * Held back from the network budget for parsing, scoring and building the
@@ -85,6 +86,24 @@ export class Deadline {
 
   constructor(totalMs: number = config.scanner.totalTimeoutMs) {
     this.endsAt = Date.now() + Math.max(1000, totalMs - Deadline.PROCESSING_RESERVE_MS);
+  }
+
+  /**
+   * A shorter deadline nested inside this one.
+   *
+   * For work that is a means rather than an end. Reading a sitemap exists only
+   * to choose which five pages to fetch; on thesouledstore.com it spent 6.5 of
+   * the 12 available seconds returning 4,995 URLs, and the five pages it chose
+   * then got zero milliseconds and failed. The heaviest check in the report —
+   * structured data — was reported as "we ran out of time" because a cheaper
+   * step had already spent the budget it needed.
+   *
+   * Never extends the parent: the child expires at whichever comes first.
+   */
+  slice(maxMs: number): Deadline {
+    const child = new Deadline();
+    child.endsAt = Math.min(this.endsAt, Date.now() + maxMs);
+    return child;
   }
 
   remainingMs(): number {
@@ -125,6 +144,23 @@ const MAX_BODY_BYTES = 5 * 1024 * 1024;
  * body.
  */
 const PROBE_BODY_BYTES = 64 * 1024;
+
+/**
+ * How long a crawler probe waits before concluding the server will not answer.
+ *
+ * Four seconds, not the ten a normal page fetch gets. The probe asks one
+ * question — does this server serve this user-agent? — and a server that has
+ * said nothing after four seconds has answered it. nykaa.com stalls every
+ * crawler-shaped request until the full timeout, so one wave of four probes was
+ * consuming ten of the scan's seventeen network seconds to learn something the
+ * first four told us.
+ *
+ * It is also the standard this report holds sites to. We tell owners that
+ * assistants fetch competing sources in parallel and write the answer from
+ * whatever arrives first; waiting ten seconds is not what a crawler does, so
+ * measuring with a ten-second patience would not reflect what a crawler sees.
+ */
+const PROBE_TIMEOUT_MS = 4000;
 
 const CHALLENGE_MARKERS = [
   'just a moment...',
@@ -208,7 +244,36 @@ async function readCapped(stream: NodeJS.ReadableStream, limit: number): Promise
   // that is a megabyte of someone's bandwidth we have no use for.
   (stream as unknown as { destroy?: () => void }).destroy?.();
 
-  return { body: Buffer.concat(chunks).subarray(0, limit).toString('utf8'), truncated };
+  const raw = Buffer.concat(chunks).subarray(0, limit);
+  return { body: decompressIfGzipped(raw).toString('utf8'), truncated };
+}
+
+/**
+ * A gzipped *file*, as opposed to a gzip-encoded response.
+ *
+ * axios already handles `Content-Encoding: gzip` — that is the transport
+ * compressing a response in flight, and it is undone before we ever see it.
+ * This is the other thing: a file that is itself a .gz, served as ordinary
+ * bytes. Nothing unwraps that for us.
+ *
+ * It matters because gzipped sitemaps are the norm at scale, not an oddity —
+ * Google recommends them for large sites. booking.com declares 354 sitemaps
+ * whose children are all `.xml.gz`; we fetched them, read the compressed bytes
+ * as text, found no <loc> tags, and concluded the site had no pages worth
+ * sampling. Every large site using .gz has been giving us nothing to work with.
+ *
+ * Detected by the two magic bytes rather than the file extension, because the
+ * extension is a convention and the bytes are a fact.
+ */
+function decompressIfGzipped(raw: Buffer): Buffer {
+  if (raw.length < 2 || raw[0] !== 0x1f || raw[1] !== 0x8b) return raw;
+  try {
+    return gunzipSync(raw);
+  } catch {
+    // A truncated archive cannot be unwrapped. Returning the raw bytes leaves
+    // the caller exactly where it was rather than throwing away the request.
+    return raw;
+  }
 }
 
 function headersOf(response: AxiosResponse): Record<string, string> {
@@ -253,6 +318,13 @@ function looksRateLimited(status: number, headers: Record<string, string>): bool
 
 export interface FetchOptions {
   /**
+   * Wait no longer than this for a response, in milliseconds.
+   *
+   * Still bounded by the scan deadline — this only ever shortens the wait, it
+   * cannot extend it past the budget.
+   */
+  timeoutMs?: number;
+  /**
    * Keep at most this many bytes of the body.
    *
    * Defaults to MAX_BODY_BYTES. Callers that only need the status code pass
@@ -275,7 +347,7 @@ export interface FetchOptions {
  * Fetch a URL within the scan's remaining budget. Never throws — every failure
  * mode is reported in the result, because a failed fetch is itself a finding.
  */
-export { PROBE_BODY_BYTES };
+export { PROBE_BODY_BYTES, PROBE_TIMEOUT_MS };
 
 export async function fetchUrl(url: string, deadline: Deadline, options: FetchOptions = {}): Promise<FetchResult> {
   const startedAt = Date.now();
@@ -299,7 +371,7 @@ export async function fetchUrl(url: string, deadline: Deadline, options: FetchOp
     return { ...base, failure: 'deadline_exceeded', durationMs: 0 };
   }
 
-  const timeout = Math.min(config.scanner.requestTimeoutMs, deadline.remainingMs());
+  const timeout = Math.min(options.timeoutMs ?? config.scanner.requestTimeoutMs, config.scanner.requestTimeoutMs, deadline.remainingMs());
 
   try {
     const response = await axios.get<string>(url, {

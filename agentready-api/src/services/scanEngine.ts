@@ -1,6 +1,6 @@
 import { config } from '../config';
 import { CheckId, CheckOutcome, CheckResult, ScanResult, SiteType } from '../types';
-import { Deadline, FetchResult, PROBE_BODY_BYTES, fetchUrl, fetchWithHttpFallback } from './fetcher';
+import { Deadline, FetchResult, PROBE_BODY_BYTES, PROBE_TIMEOUT_MS, fetchUrl, fetchWithHttpFallback } from './fetcher';
 import { HtmlDocument, typesOf } from './htmlDocument';
 import { ScanContext } from './scanContext';
 import { collectSitemapUrls, isSampleablePage, selectKeyPages } from './discovery';
@@ -57,7 +57,19 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
   const { href, origin, domain } = normalizeUrl(submittedUrl);
   const deadline = new Deadline(config.scanner.totalTimeoutMs);
 
-  const homepage = new HtmlDocument(await fetchWithHttpFallback(href, deadline));
+  /**
+   * The homepage gets a slice too, so a failure can still be diagnosed.
+   *
+   * A stalling server holds the https attempt for the full per-request timeout,
+   * then holds the http fallback for whatever is left — 17 seconds on
+   * myntra.com, the entire budget, with nothing remaining to ask *why*. The
+   * browser probe below then could not run, and the report fell back to "your
+   * homepage did not respond" when the truthful answer was "your homepage
+   * answers browsers and stalls everything else".
+   *
+   * Diagnosing a failure is worth more than waiting longer for it.
+   */
+  const homepage = new HtmlDocument(await fetchHomepage(href, deadline));
 
   /**
    * Stop before anything else if there is no website here to grade.
@@ -73,11 +85,53 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
     return noWebsiteResult(submittedUrl, domain, homepage, startedAt, missing);
   }
 
-  const robotsTxt = await fetchUrl(`${origin}/robots.txt`, deadline);
+  /**
+   * We got nothing, but is that about them or about us?
+   *
+   * One request, as an ordinary browser, purely to classify what just happened.
+   * If a browser is served where our scanner was stalled or refused, the site is
+   * plainly up and is treating non-browser visitors differently — which is the
+   * finding, not an absence of one.
+   *
+   * The body is thrown away. Judging a site's content on a page obtained by
+   * looking like something we are not would make every other number in the
+   * report unverifiable, so this establishes one fact and nothing more.
+   */
+  const homepageFailed = !homepage.ok;
+  const browserReachable = homepageFailed ? await confirmWithBrowserProbe(href, deadline) : false;
+  /**
+   * Follow the site to where it actually lives.
+   *
+   * `origin` comes from what the visitor typed, and plenty of sites answer on
+   * the apex only to redirect to www (or the reverse). Everything downstream —
+   * robots.txt, the sitemap, /llms.txt, the crawler probes — was still being
+   * asked of the original host, which on snitch.com meant a different robots.txt
+   * and a sitemap that yielded four fewer product pages.
+   *
+   * The visible cost was worse than the missing pages: the same shop scored
+   * D/52 typed as "snitch.com" and C/60 typed as "www.snitch.com". A grade that
+   * depends on how you typed the address is not a grade anyone can act on, and
+   * two people comparing notes would each be sure the other had it wrong.
+   *
+   * A crawler follows the redirect and treats the destination as the site. So do
+   * we now.
+   */
+  const canonicalOrigin = homepage.ok ? originOf(homepage.url) ?? origin : origin;
+  const robotsTxt = await fetchUrl(`${canonicalOrigin}/robots.txt`, deadline);
   const robots: ParsedRobots | null =
     robotsTxt.ok && robotsTxt.body && !looksLikeHtml(robotsTxt) ? parseRobotsTxt(robotsTxt.body) : null;
 
-  const sitemap = await collectSitemapUrls(origin, robots?.sitemaps ?? [], deadline);
+  /**
+   * The sitemap gets a slice of the budget, not the run of it.
+   *
+   * It is a means to an end: we read it to decide which five pages to fetch, and
+   * those pages feed the heaviest check in the report. On thesouledstore.com it
+   * consumed 6.5 of 12 available seconds and handed back 4,995 URLs; the five
+   * pages it selected were then fetched with nothing left and every one failed,
+   * so structured data came back "we ran out of time" — on a scan where the
+   * expensive part had never been the pages at all.
+   */
+  const sitemap = await collectSitemapUrls(canonicalOrigin, robots?.sitemaps ?? [], deadline.slice(SITEMAP_BUDGET_MS));
 
   // Classify before sampling: a blog and a store want completely different
   // pages fetched, and fetching the wrong ones wastes the budget.
@@ -89,7 +143,7 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
     : detected;
   const profile = profileFor(verdict.siteType);
 
-  const selection = selectKeyPages(homepage, sitemap.urls, verdict.siteType, config.scanner.maxKeyPages);
+  const selection = selectKeyPages(homepage, sitemap.urls, verdict.siteType, config.scanner.maxKeyPages, sitemap.productUrls);
   const candidateUrls = selection.urls;
 
   // Agent artefacts and key pages are independent, so fetch them together —
@@ -97,14 +151,27 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
   const artifactSpecs = AGENT_ARTIFACT_PATHS[verdict.siteType];
 
   const [artifactResponses, keyPageResponses, probeResponses] = await Promise.all([
-    Promise.all(artifactSpecs.map((spec) => fetchUrl(`${origin}${spec.path}`, deadline))),
-    deadline.expired() ? Promise.resolve([]) : Promise.all(candidateUrls.map((url) => fetchUrl(url, deadline))),
+    Promise.all(artifactSpecs.map((spec) => fetchUrl(`${canonicalOrigin}${spec.path}`, deadline))),
+    /**
+     * No point asking for more pages from a server that would not give us one.
+     *
+     * If the homepage never arrived — stalled, refused, or errored — the same
+     * will happen to every product page, and each one costs a full ten-second
+     * wait to prove it. nykaa.com spent ten of its twenty seconds fetching four
+     * pages that were always going to time out, on top of the wave of crawler
+     * probes that had already told us the server stalls anything non-browser.
+     *
+     * Skipping them changes no verdict: the checks that need page content
+     * already report "not scored" when there is none, and crawlability reports
+     * the access problem itself. It only stops us paying for the same answer
+     * twice.
+     */
+    !homepage.ok || deadline.expired() ? Promise.resolve([]) : Promise.all(candidateUrls.map((url) => fetchUrl(url, deadline))),
     // Ask for the homepage again as each named AI crawler. This is what
     // separates "robots.txt allows GPTBot" from "the server actually serves
     // GPTBot" — a gap that costs sites their entire AI visibility silently.
     probeAsCrawlers(homepage.url, deadline),
   ]);
-
   const botProbes: Record<string, FetchResult> = {};
   [...LIVE_PROBE_BOTS, CONTROL_BOT].forEach((bot, index) => {
     botProbes[bot.agent] = probeResponses[index];
@@ -115,7 +182,7 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
     agentArtifacts[spec.key] = artifactResponses[index];
   });
 
-  const keyPages = keyPageResponses
+  const parseable = keyPageResponses
     .filter((result) => {
       // A discontinued page often redirects to a listing or landing page.
       // Judging that page for missing schema would report a gap the site does
@@ -126,13 +193,32 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
       const redirected = stripSlash(result.finalUrl) !== stripSlash(result.requestedUrl);
       return !redirected || isSampleablePage(result.finalUrl, verdict.siteType);
     })
-    .map((result) => new HtmlDocument(result));
+    .filter(withinAnalysisBudget());
 
+  /**
+   * Parse until the clock says stop, not until the list runs out.
+   *
+   * cheerio runs before any check does, so no guard placed between checks can
+   * bound it — and a byte budget turned out to be the wrong lever: nykaa.com's
+   * pages are 0.59MB each and were the most expensive in the whole corpus, while
+   * boat-lifestyle.com's are 2.5MB and parse quickly. Cost tracks DOM complexity,
+   * which we cannot know without paying for it.
+   *
+   * Time is the thing we actually promise, so time is what governs this. Pages
+   * are parsed one at a time and we stop when the budget is nearly spent, which
+   * bounds the overshoot to a single page whatever the site does.
+   */
+  const parseBy = startedAt + Math.floor(config.scanner.totalTimeoutMs * 0.8);
+  const keyPages: HtmlDocument[] = [];
+  for (const result of parseable) {
+    if (Date.now() > parseBy && keyPages.length) break;
+    keyPages.push(new HtmlDocument(result));
+  }
   const ranOutOfTime = deadline.expired();
 
   const context: ScanContext = {
     submittedUrl,
-    origin,
+    origin: canonicalOrigin,
     domain,
     siteType: verdict.siteType,
     siteTypeConfidence: verdict.confidence,
@@ -145,29 +231,49 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
     robots,
     agentArtifacts,
     botProbes,
+    browserReachable,
     sitemapFound: sitemap.found,
     sitemapUrls: sitemap.urls,
     siteName: detectSiteName(homepage, domain),
     deadline,
   };
 
+  /**
+   * The clock covers thinking, not just fetching.
+   *
+   * The deadline gated every network call and nothing else, so once the fetches
+   * were done the checks ran to completion however long they took. On nykaa.com
+   * that was 18.8 seconds of pure CPU — parsing six large pages and walking
+   * their DOMs — against a three-second processing reserve, and a scan we
+   * promise in twenty seconds finished in thirty-six.
+   *
+   * Reserving more time would not fix it: the work is proportional to how big
+   * the pages are, so there is no reserve large enough for every site. The
+   * answer is a ceiling that is actually enforced. A check that does not get to
+   * run is reported as unverified — never as a failure — which is the same rule
+   * applied everywhere else we could not look.
+   */
+  const hardStop = startedAt + config.scanner.totalTimeoutMs;
+  const outOfTime = (): boolean => Date.now() >= hardStop;
+
+  const run = (checkId: CheckId, check: () => CheckOutcome): CheckOutcome =>
+    outOfTime() ? unableToVerify(checkId, context.siteType) : check();
+
   // Network-free checks first, so a tight budget costs us the cheapest check
   // rather than the most valuable one.
   const outcomes: CheckOutcome[] = [];
   outcomes.push(checkBotAccess(context));
   outcomes.push(checkAgentInterface(context));
-
-  const structured = resolveStructuredData(context, ranOutOfTime);
+  const structured = outOfTime()
+    ? { outcome: unableToVerify('structured_data', context.siteType), timedOut: true }
+    : resolveStructuredData(context, ranOutOfTime);
   outcomes.push(structured.outcome);
-  outcomes.push(checkContentStructure(context));
-  outcomes.push(checkMetaRobots(context));
-
+  outcomes.push(run('content_structure', () => checkContentStructure(context)));
+  outcomes.push(run('meta_robots', () => checkMetaRobots(context)));
   const crawlability = checkCrawlability(context);
   outcomes.push(crawlability.outcome);
-
   // Last, because it is the only check that may still make requests.
-  outcomes.push(await checkTrustSignals(context));
-
+  outcomes.push(outOfTime() ? unableToVerify('trust_signals', context.siteType) : await checkTrustSignals(context));
   const checks: CheckResult[] = CHECK_ORDER.map((checkId) => {
     const outcome = outcomes.find((candidate) => candidate.checkId === checkId);
     // Defensive: a missing outcome would silently drop weight from the score.
@@ -175,6 +281,17 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
   });
 
   const { score, grade } = totalScore(checks, verdict.siteType);
+
+  /**
+   * Nothing was in play, so there is nothing to grade.
+   *
+   * When every weighted check ends up skipped there are zero points available,
+   * and the score falls through to F/0 — croma.com and wakefit.co both landed
+   * there purely for refusing our requests. Their sites work perfectly for their
+   * customers; we were turned away at the door and then published a failing
+   * grade about what we never saw.
+   */
+  const unreadable = checks.every((check) => check.pointsPossible === 0);
 
   return {
     domain,
@@ -185,7 +302,7 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
     siteTypeOverridden: Boolean(options.siteType),
     overallScore: score,
     overallGrade: grade,
-    summary: buildSummary(grade, checks, verdict.siteType),
+    summary: unreadable ? unreadableSummary(domain, browserReachable) : buildSummary(grade, checks, verdict.siteType),
     checks,
     pagesScanned: [homepage.url, ...keyPages.map((page) => page.url)],
     pagesDiscovered: selection.discovered,
@@ -207,8 +324,9 @@ export async function runScan(submittedUrl: string, options: ScanOptions = {}): 
      * is captured — the trust-signals check still makes requests after that
      * point, so a scan can exhaust its budget between the two.
      */
-    partial: deadline.expired() || structured.timedOut,
+    partial: deadline.expired() || structured.timedOut || outOfTime(),
     noWebsite: false,
+    unreadable,
     scoringVersion: SCORING_VERSION,
   };
 }
@@ -282,6 +400,60 @@ function resolveStructuredData(
  * Four at a time with a short pause is still far quicker than a real crawler
  * would ever be, and it costs about half a second of a fifteen-second budget.
  */
+/**
+ * The most we will spend choosing which pages to look at, before we look at
+ * them. Roughly a quarter of a 20-second scan.
+ */
+const SITEMAP_BUDGET_MS = 4000;
+
+/** The most we will wait for the homepage before diagnosing instead. */
+const HOMEPAGE_BUDGET_MS = 10000;
+
+/**
+ * How much markup one scan will parse and analyse.
+ *
+ * Every check walks these pages, several of them more than once, so the cost
+ * scales with total DOM size. nykaa.com spent 18.8 seconds of pure CPU after its
+ * network work finished — cheerio parsing six large pages and the checks walking
+ * them — and turned a twenty-second promise into fifty-five.
+ *
+ * A clock check between checks helped but could not stop work already underway,
+ * and cheerio parsing happens before any check runs at all. Bounding the input
+ * is the only thing that makes the work finite. It degrades in the right
+ * direction: the homepage is never dropped, and the report already states how
+ * many pages were checked against how many were found, so a scan that examines
+ * four of six says so rather than pretending otherwise.
+ *
+ * Sized on measurement, and raised from 6MB after that first guess cost
+ * boat-lifestyle.com half its sample: its pages are 2.5MB each, so six of them
+ * need fifteen. A narrower sample is not a neutral saving — boat dropped from
+ * B to C purely because the three pages that survived the cut happened to be
+ * the ones without Product markup, which is sampling noise dressed up as a
+ * finding.
+ *
+ * Worth knowing that bytes are only a proxy: nykaa.com's pages are 0.59MB and
+ * were the slowest to analyse in the whole corpus, because cost tracks DOM
+ * complexity rather than size. The budget is a backstop against pathological
+ * input, not the mechanism that keeps scans quick — the probe and deadline
+ * fixes do that.
+ */
+const ANALYSIS_BYTE_BUDGET = 16 * 1024 * 1024;
+
+/**
+ * Measured on the raw response, not the parsed document — the whole point is to
+ * decide *before* paying cheerio's cost, and a DOM we have already built has
+ * already cost us the thing we were trying to avoid.
+ */
+function withinAnalysisBudget(): (result: FetchResult) => boolean {
+  let spent = 0;
+  return (result: FetchResult): boolean => {
+    const size = result.body?.length ?? 0;
+    if (spent + size > ANALYSIS_BYTE_BUDGET) return false;
+    spent += size;
+    return true;
+  };
+}
+
 const PROBE_WAVE_SIZE = 4;
 const PROBE_WAVE_GAP_MS = 250;
 const RATE_LIMIT_BACKOFF_MS = 800;
@@ -296,6 +468,23 @@ const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
  * the crawler. If the retry is rate-limited too, the result carries that fact
  * through to the check, which reports "could not test" rather than "blocked".
  */
+/**
+ * One diagnostic request as a real browser, to tell "down" from "stalling bots".
+ *
+ * The same idea as the Googlebot control in the bot-access check: a single
+ * comparison request that turns a guess into an observation. Only ever sent
+ * after a failure, only ever used to classify it.
+ */
+async function confirmWithBrowserProbe(url: string, deadline: Deadline): Promise<boolean> {
+  if (deadline.expired()) return false;
+  const probe = await fetchUrl(url, deadline.slice(BROWSER_PROBE_MS), { userAgent: BROWSER_UA, maxBytes: PROBE_BODY_BYTES });
+  return probe.ok;
+}
+
+const BROWSER_PROBE_MS = 6000;
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+
 async function probeAsCrawlers(url: string, deadline: Deadline): Promise<FetchResult[]> {
   const bots = [...LIVE_PROBE_BOTS, CONTROL_BOT];
   const results: FetchResult[] = [];
@@ -312,7 +501,30 @@ async function probeAsCrawlers(url: string, deadline: Deadline): Promise<FetchRe
 
     if (start > 0) await pause(PROBE_WAVE_GAP_MS);
     const wave = bots.slice(start, start + PROBE_WAVE_SIZE);
-    results.push(...(await Promise.all(wave.map((bot) => fetchUrl(url, deadline, { userAgent: bot.userAgent, maxBytes: PROBE_BODY_BYTES })))));
+    const answers = await Promise.all(
+      wave.map((bot) => fetchUrl(url, deadline, { userAgent: bot.userAgent, maxBytes: PROBE_BODY_BYTES, timeoutMs: PROBE_TIMEOUT_MS })),
+    );
+    results.push(...answers);
+
+    /**
+     * The whole wave was met with silence, so the next two will be as well.
+     *
+     * A server that holds four crawler-shaped requests open until they time out
+     * is not making per-crawler decisions — it is stalling anything that is not
+     * a browser, and we have already established that. nykaa.com spent all
+     * seventeen seconds of its network budget proving the same point three
+     * times, leaving nothing for the pages that carry the actual content.
+     *
+     * The remaining crawlers are recorded as untested rather than allowed or
+     * blocked, because that is what they are: we chose not to ask.
+     */
+    const waveStalled = answers.every((answer) => answer.failure === 'timeout' || answer.failure === 'deadline_exceeded');
+    if (waveStalled && start + PROBE_WAVE_SIZE < bots.length) {
+      for (let i = results.length; i < bots.length; i += 1) {
+        results.push({ ...EMPTY_PROBE, requestedUrl: url, finalUrl: url, failure: 'timeout' });
+      }
+      break;
+    }
   }
 
   const limited = results.map((result, index) => ({ result, index })).filter(({ result }) => result.rateLimited);
@@ -320,7 +532,7 @@ async function probeAsCrawlers(url: string, deadline: Deadline): Promise<FetchRe
     await pause(RATE_LIMIT_BACKOFF_MS);
     for (const { index } of limited) {
       if (deadline.expired()) break;
-      results[index] = await fetchUrl(url, deadline, { userAgent: bots[index].userAgent });
+      results[index] = await fetchUrl(url, deadline, { userAgent: bots[index].userAgent, maxBytes: PROBE_BODY_BYTES, timeoutMs: PROBE_TIMEOUT_MS });
     }
   }
 
@@ -386,8 +598,21 @@ export function whyNoWebsite(homepage: HtmlDocument): NoWebsiteReason | null {
      * Saying a website does not exist is the strongest claim this tool makes and
      * it should rest on evidence, not on the bucket labelled "something else".
      */
-    case 'timeout':
-      return 'timeout';
+    /**
+     * `timeout` is deliberately absent, and this is the expensive lesson.
+     *
+     * myntra.com answers a browser in 1.0 seconds with 448KB and HTTP 200. It
+     * never answers us at all — it holds the connection open and says nothing,
+     * which is what a WAF does to an unrecognised bot instead of returning 403.
+     * We waited 17 seconds and told one of India's largest retailers that it had
+     * no website.
+     *
+     * A timeout cannot distinguish "this server is down" from "this server is
+     * stalling us specifically", and those are opposite findings — the second is
+     * the single most valuable thing this tool can report, because the AI
+     * crawlers are being stalled the same way and will never mention it either.
+     * So we no longer guess: see confirmWithBrowserProbe, which asks.
+     */
     /**
      * `deadline_exceeded` is deliberately absent.
      *
@@ -505,6 +730,7 @@ function noWebsiteResult(
     jsRenderWarning: false,
     partial: false,
     noWebsite: true,
+    unreadable: false,
     scoringVersion: SCORING_VERSION,
   };
 }
@@ -532,6 +758,67 @@ function looksLikeHtml(response: { contentType: string | null; body: string | nu
 }
 
 const stripSlash = (url: string): string => url.replace(/\/+$/, '');
+
+/**
+ * Fetch the homepage, and give a transient failure one second chance.
+ *
+ * Everything in the report hangs off this one request: if it fails, every
+ * content check is skipped and the grade collapses. snitch.com scores C/60 on
+ * three consecutive runs and scored F/33 on a fourth, purely because its
+ * homepage happened to time out that once — the scan was honest about it, but
+ * the visitor still saw an F for a healthy shop, and would have no way of
+ * knowing to try again.
+ *
+ * One retry, on a short leash, and only for failures that are plausibly
+ * transient. A refusal is not retried: a server that returns 403 will return
+ * 403 again, and asking twice would just be rude. A site that is genuinely down
+ * costs us a few extra seconds and still reports as down.
+ */
+const RETRYABLE_FAILURES = new Set(['timeout', 'network', 'deadline_exceeded']);
+const HOMEPAGE_RETRY_MS = 6000;
+
+async function fetchHomepage(href: string, deadline: Deadline): Promise<FetchResult> {
+  const first = await fetchWithHttpFallback(href, deadline.slice(HOMEPAGE_BUDGET_MS));
+  if (first.ok || !first.failure || !RETRYABLE_FAILURES.has(first.failure) || deadline.expired()) {
+    return first;
+  }
+
+  const second = await fetchWithHttpFallback(href, deadline.slice(HOMEPAGE_RETRY_MS));
+  return second.ok ? second : first;
+}
+
+/**
+ * What we say when a site would not let us look at it.
+ *
+ * Deliberately not a verdict. The site is up and serving its customers; we were
+ * refused, and the only honest report is what we tried and what happened. The
+ * one thing that changes the message is whether an ordinary browser got in
+ * where we did not — that is the difference between "your bot protection is
+ * broad" and "you are filtering by network, and we are on the wrong network".
+ */
+function unreadableSummary(domain: string, browserReachable: boolean): string {
+  if (browserReachable) {
+    return (
+      `${domain} is online and loads in a browser, but refused every request we made as a scanner, so we could not check a single thing. ` +
+      'That is worth knowing on its own: bot protection set this broadly usually turns away ChatGPT, Claude and Perplexity too, and they will not tell you either. ' +
+      'We have given no score, because a grade would be a judgement about pages we never saw.'
+    );
+  }
+  return (
+    `${domain} refused every request we made — including one shaped like an ordinary browser — so we could not check anything. ` +
+    'That pattern usually means the filtering is by network address rather than by who is asking, in which case your site is working perfectly for your customers and this tells you nothing about how you treat AI crawlers. ' +
+    'We have given no score rather than invent one. To find out for certain, ask whoever manages your hosting to search your server logs for GPTBot, ClaudeBot and PerplexityBot over the last month.'
+  );
+}
+
+/** The scheme-and-host of a URL, or null if it will not parse. */
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
 
 function detectSiteName(homepage: HtmlDocument, domain: string): string {
   const ogSiteName = homepage.$?.('meta[property="og:site_name"]').first().attr('content')?.trim();
